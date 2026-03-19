@@ -80,8 +80,8 @@ agent-service/
 | Service user | One dedicated internal Odoo user (e.g. `agent-service@proseso-ventures.odoo.com`) used for all API calls |
 | `res.partner` per agent | Separate partner record per agent — name + avatar appear in Discuss |
 | Discuss channel per agent | One private channel per agent; channel `id` is the lookup key for agent config |
-| Automated Action per channel | Fires webhook on `mail.message` create; domain filter excludes agent partner's own messages |
-| `ai.agent` record per agent | Stores system prompt + model; linked to channel via `partner_id` ← verified writable via XML-RPC on `proseso-ventures.odoo.com` |
+| Automated Action per agent channel | One Automated Action per channel, each with a hardcoded domain filter: `[('author_id', '!=', <agent_partner_id>), ('res_id', '=', <channel_id>), ('message_type', '=', 'comment')]` — prevents the agent's own replies from triggering the webhook |
+| `ai.agent` record per agent | Stores system prompt + model — **confirmed installed and writable via XML-RPC** on `proseso-ventures.odoo.com` (models `ai.agent` id 596, `ai.agent.source` id 597 verified in this session) |
 
 **Note on posting as agent partner:** `mail.channel.message_post` accepts `author_id` as a kwarg. Whether Odoo Online permits overriding `author_id` for a non-owner partner depends on the service account's access rights. This must be verified in the target instance before building. **Fallback:** if the override is denied, post as the service user and prefix the message body with the agent name in bold (e.g. `<b>FinanceBot:</b> ...`).
 
@@ -127,9 +127,9 @@ The Automated Action webhook does **not** include `agent_partner_id` in the payl
 | Lookup | `odoo_name_search`, `odoo_name_search_batch`, `odoo_list_companies` |
 
 **Security guardrails:**
-- `odoo_delete` and `odoo_run_server_action` require explicit user confirmation text in the conversation before `agent.py` will execute them — not delegated to Gemini alone
-- Denylist of protected models: `ir.rule`, `ir.model.access`, `res.users`, `ir.config_parameter` — these cannot be modified via agent tools
-- All tool calls are logged with the originating message for audit
+- `odoo_delete` and `odoo_run_server_action` are guarded: `agent.py` checks whether the most recent user message (from the webhook payload `author_partner_id`) contains any of these keywords: `"confirm"`, `"yes"`, `"proceed"`, `"go ahead"`. If none are present, the tool call is blocked and a canned error is returned to Gemini: `"User confirmation required. Ask the user to confirm before proceeding."` — Gemini then asks the user explicitly.
+- Denylist of protected models: `ir.rule`, `ir.model.access`, `res.users`, `ir.config_parameter` — these cannot be read or modified via agent tools
+- All tool calls are logged with the originating `message_id` for audit
 
 ### Output Tools (`output_tools.py`) — Dynamic MCP client for Google Drive server
 
@@ -145,9 +145,11 @@ At service startup, the agent service connects to `google-drive-mcp-server` via 
 | `attach_file` | Any file | Upload to `ir.attachment` → link to reply `mail.message` via `attachment_ids` |
 
 **File attachment sequence for Discuss:**
-1. Upload binary → `ir.attachment.create` with `res_model='mail.channel'`, `res_id=channel_id`
-2. Call `mail.channel.message_post` with `attachment_ids=[attachment_id]`
-3. Attachment appears inline in Discuss (images) or as download link (other files)
+1. Upload binary → `ir.attachment.create` with `res_model='mail.channel'`, `res_id=channel_id` (pre-link to channel so Odoo accepts it before the message exists)
+2. Call `mail.channel.message_post` with `attachment_ids=[attachment_id]` — Odoo re-links the attachment to the created `mail.message` internally
+3. Attachment appears inline in Discuss (images rendered inline; other files as download links)
+
+Note: Using `res_model='mail.channel'` for the initial upload is Odoo's standard pattern (same as the browser UI). Do not use `res_model='mail.message'` at upload time — the message does not exist yet.
 
 ---
 
@@ -158,7 +160,7 @@ At service startup, the agent service connects to `google-drive-mcp-server` via 
    - Trigger: `mail.message` on create
    - Domain filter: `[('author_id', '!=', agent_partner_id), ('res_id', '=', channel_id), ('message_type', '=', 'comment')]`
    - Action: HTTP POST to `https://agent-service.run.app/{WEBHOOK_SECRET}/webhook`
-   - Payload: `{ channel_id, message_id, body, author_name }`
+   - Payload: `{ channel_id, message_id, body, author_name, author_partner_id }`
 3. Service validates URL secret — 401 if mismatch
 4. Service returns `200 OK` immediately; spawns `BackgroundTask` for processing
 5. **Cooldown check:** fetch last message in channel from Odoo — if sender is agent partner AND timestamp < `DEBOUNCE_SECONDS` ago → skip. This is a cooldown (not a true debounce): first message in a rapid burst is processed; subsequent messages within the window are dropped. This is the intended behavior for v1.
@@ -167,7 +169,7 @@ At service startup, the agent service connects to `google-drive-mcp-server` via 
 8. Fetch conversation history from `mail.message`:
    - Filter: `res_id = channel_id`, `message_type = 'comment'`, exclude system/notification partners
    - Limit: `HISTORY_LIMIT` messages, capped by `HISTORY_MAX_CHARS` (approximate token budget)
-   - Build `[{role: "user"/"model", content: "..."}]` for Gemini
+   - Build `[{role: "user"/"model", content: "..."}]` for Gemini — role mapping: if `author_id == agent_partner_id` → `"model"`, else → `"user"`. `agent_partner_id` is retrieved from Secret Manager in Step 6.
 9. Call Gemini: model name, system prompt, history, full tool set
 10. **Function calling loop** (max `MAX_TOOL_ITERATIONS` = 10):
     - Gemini requests tool call → check denylist + confirmation requirements → execute XML-RPC or MCP call → return result to Gemini
@@ -181,6 +183,7 @@ At service startup, the agent service connects to `google-drive-mcp-server` via 
 
 - **Multiple channels simultaneously:** Cloud Run auto-scales; each webhook is independent — handled natively
 - **Same-channel rapid messages:** Cooldown check (Step 5) drops messages within `DEBOUNCE_SECONDS` of the last agent reply. First message is processed; subsequent rapid messages are dropped in v1.
+- **Same-instance race condition:** With `concurrency: 80`, two messages arriving milliseconds apart spawn two concurrent background tasks on the same process. Both may pass the cooldown check before either posts a reply. Mitigation: `agent.py` uses an in-process `asyncio.Lock` keyed by `channel_id` — only one background task per channel runs at a time; concurrent tasks for the same channel wait their turn (and the second will then hit the cooldown check and be dropped).
 - **Future:** Cloud Tasks FIFO queue per channel for strict sequential processing without message dropping
 
 ---
@@ -249,7 +252,7 @@ Follows the same Cloud Build + Cloud Run pattern as `google-drive-mcp-server` an
 | `WEBHOOK_SECRET` | Shared secret in URL path for webhook validation |
 | `GOOGLE_DRIVE_MCP_URL` | URL of the Google Drive MCP server |
 | `GOOGLE_DRIVE_MCP_SECRET` | Auth secret for Google Drive MCP server |
-| `DEFAULT_GEMINI_MODEL` | Fallback model if not in system prompt (must support function calling) |
+| `DEFAULT_GEMINI_MODEL` | Fallback model if `[MODEL: ...]` absent or invalid (default: `gemini-2.5-flash` — supports function calling) |
 | `MAX_TOOL_ITERATIONS` | Max Gemini tool call iterations per response (default: 10) |
 | `DEBOUNCE_SECONDS` | Cooldown window in seconds (default: 10) |
 | `HISTORY_LIMIT` | Max messages to include in history (default: 20) |
