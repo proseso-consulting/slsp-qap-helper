@@ -296,7 +296,13 @@ def export_report(
 
                 summary = f"{len(bill_rows)} bills + {len(je_rows)} journal entries = {len(merged)} total"
                 label = "SLP" if slsp_type == "purchases" else "SLS"
+                type_char = "P" if slsp_type == "purchases" else "S"
                 filename = f"{label}_{date_from}_to_{date_to}_{safe_db}"
+
+                def _slsp_dat_filename(ym: str) -> str:
+                    """BIR SLSP filename: <TIN><P|S><MMYYYY>.dat  e.g. 005302695P112025.dat"""
+                    year, month = ym.split("-")
+                    return f"{filing_tin}{type_char}{month}{year}.dat"
 
                 if format == "dat":
                     # Group rows by month; if multi-month → ZIP, else single DAT
@@ -310,7 +316,7 @@ def export_report(
                         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                             for ym, month_rows in by_month.items():
                                 dat_content = write_slsp_dat(month_rows, report_type=slsp_type, filing_tin=filing_tin)
-                                zf.writestr(f"{label}_{ym}_{safe_db}.dat", dat_content.encode("cp1252", errors="replace"))
+                                zf.writestr(_slsp_dat_filename(ym), dat_content.encode("cp1252", errors="replace"))
                         zip_buf.seek(0)
                         return StreamingResponse(
                             zip_buf,
@@ -320,12 +326,14 @@ def export_report(
                                 "X-Export-Summary": quote(summary),
                             },
                         )
+                    # Single month — derive MMYYYY from date_from
+                    ym_single = date_from[:7]
                     content = write_slsp_dat(merged, report_type=slsp_type, filing_tin=filing_tin)
                     return StreamingResponse(
                         io.BytesIO(content.encode("cp1252", errors="replace")),
                         media_type="application/octet-stream",
                         headers={
-                            "Content-Disposition": f'attachment; filename="{filename}.dat"',
+                            "Content-Disposition": f'attachment; filename="{_slsp_dat_filename(ym_single)}"',
                             "X-Export-Summary": quote(summary),
                         },
                     )
