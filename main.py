@@ -127,6 +127,9 @@ def _extract_slsp_rows(conn, moves, report_type, source_label, partners_cache=No
                     continue
                 if report_type == "sales" and use != "sale":
                     continue
+                # Skip EWT/FWT taxes — they have ATC codes and belong in QAP, not SLSP
+                if tax.get("l10n_ph_atc"):
+                    continue
                 gross = abs(line.get("price_subtotal", 0))
                 tax_amt = round(gross * abs(tax.get("amount", 0)) / 100, 2)
                 account_id_val = line.get("account_id")
