@@ -11,11 +11,14 @@ Unknown tokens receive a 404 to avoid confirming service existence.
 
 from __future__ import annotations
 
+import calendar
 import io
 import json
 import logging
 import os
+import re
 from datetime import date
+from datetime import date as date_type
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request, Query
@@ -39,6 +42,9 @@ templates = Jinja2Templates(directory="templates")
 
 _ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN", "")
 
+if not _ACCESS_TOKEN:
+    raise RuntimeError("ACCESS_TOKEN environment variable must be set")
+
 
 def _check_token(token: str):
     """Return 404 for unknown tokens — avoids confirming service existence."""
@@ -49,7 +55,11 @@ def _check_token(token: str):
 
 def _load_clients() -> list[dict]:
     raw = os.environ.get("ODOO_CLIENTS_JSON", "[]")
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        log.error("ODOO_CLIENTS_JSON is not valid JSON: %s", e)
+        return []
 
 
 def _default_quarter_dates() -> tuple[str, str]:
@@ -58,9 +68,7 @@ def _default_quarter_dates() -> tuple[str, str]:
     q_start_month = ((today.month - 1) // 3) * 3 + 1
     q_start = date(today.year, q_start_month, 1)
     q_end_month = q_start_month + 2
-    days_in_month = {1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
-                     7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
-    q_end = date(today.year, q_end_month, days_in_month[q_end_month])
+    q_end = date(today.year, q_end_month, calendar.monthrange(today.year, q_end_month)[1])
     return str(q_start), str(q_end)
 
 
@@ -84,7 +92,14 @@ def _extract_slsp_rows(conn, moves, report_type, source_label):
                     continue
                 gross = abs(line.get("price_subtotal", 0))
                 tax_amt = round(gross * abs(tax.get("amount", 0)) / 100, 2)
-                category = classify_purchase(conn, line["account_id"][0]) if report_type == "purchases" else None
+                account_id_val = line.get("account_id")
+                if report_type == "purchases":
+                    if account_id_val and isinstance(account_id_val, list):
+                        category = classify_purchase(conn, account_id_val[0])
+                    else:
+                        category = "other_than_capital_goods"
+                else:
+                    category = None
                 row = {
                     "tin": clean_tin(partner.get("vat", "")),
                     "registered_name": clean_str(partner.get("name", ""), 50),
@@ -177,7 +192,8 @@ def companies_endpoint(token: str, db: str = Query(...)):
     try:
         conn = connect(client["url"], client["db"], client["user"], client["api_key"])
         return get_companies(conn)
-    except ConnectionError:
+    except Exception:
+        log.warning("Failed to load companies for db=%s", db, exc_info=True)
         return JSONResponse([], status_code=200)
 
 
@@ -194,10 +210,19 @@ def export_report(
     err = _check_token(token)
     if err:
         return err
+
+    try:
+        date_type.fromisoformat(date_from)
+        date_type.fromisoformat(date_to)
+    except ValueError:
+        return JSONResponse({"detail": "Invalid date format"}, status_code=400)
+
+    safe_db = re.sub(r"[^a-zA-Z0-9_-]", "", db_name)
+
     clients = _load_clients()
     client = next((c for c in clients if c["db"] == db_name), None)
     if not client:
-        return JSONResponse({"detail": f"Database not found"}, status_code=400)
+        return JSONResponse({"detail": "Database not found"}, status_code=400)
 
     try:
         conn = connect(client["url"], client["db"], client["user"], client["api_key"],
@@ -210,77 +235,82 @@ def export_report(
     filing_tin = clean_tin(selected.get("vat", ""))
 
     with get_semaphore(client["db"]):
-        if report_type in ("slsp_purchases", "slsp_sales"):
-            slsp_type = "purchases" if report_type == "slsp_purchases" else "sales"
-            move_types = (
-                ["in_invoice", "in_refund"] if slsp_type == "purchases"
-                else ["out_invoice", "out_refund"]
-            )
-            bills = fetch_posted_bills(conn, move_types, date_from, date_to)
-            jes = fetch_journal_entries_with_wht(conn, date_from, date_to)
-            bill_rows = _extract_slsp_rows(conn, bills, slsp_type, "bill")
-            je_rows = _extract_slsp_rows(conn, jes, slsp_type, "journal_entry")
-            merged = build_slsp_rows(bill_rows, je_rows)
+        try:
+            if report_type in ("slsp_purchases", "slsp_sales"):
+                slsp_type = "purchases" if report_type == "slsp_purchases" else "sales"
+                move_types = (
+                    ["in_invoice", "in_refund"] if slsp_type == "purchases"
+                    else ["out_invoice", "out_refund"]
+                )
+                bills = fetch_posted_bills(conn, move_types, date_from, date_to)
+                jes = fetch_journal_entries_with_wht(conn, date_from, date_to)
+                bill_rows = _extract_slsp_rows(conn, bills, slsp_type, "bill")
+                je_rows = _extract_slsp_rows(conn, jes, slsp_type, "journal_entry")
+                merged = build_slsp_rows(bill_rows, je_rows)
 
-            summary = f"{len(bill_rows)} bills + {len(je_rows)} journal entries = {len(merged)} total"
-            label = "SLP" if slsp_type == "purchases" else "SLS"
-            filename = f"{label}_{date_from}_to_{date_to}_{client['db']}"
+                summary = f"{len(bill_rows)} bills + {len(je_rows)} journal entries = {len(merged)} total"
+                label = "SLP" if slsp_type == "purchases" else "SLS"
+                filename = f"{label}_{date_from}_to_{date_to}_{safe_db}"
 
-            if format == "dat":
-                content = write_slsp_dat(merged, report_type=slsp_type, filing_tin=filing_tin)
+                if format == "dat":
+                    content = write_slsp_dat(merged, report_type=slsp_type, filing_tin=filing_tin)
+                    return StreamingResponse(
+                        io.BytesIO(content.encode("cp1252", errors="replace")),
+                        media_type="application/octet-stream",
+                        headers={
+                            "Content-Disposition": f'attachment; filename="{filename}.dat"',
+                            "X-Export-Summary": quote(summary),
+                        },
+                    )
+                buf = io.BytesIO()
+                write_slsp_xlsx(merged, buf, report_type=slsp_type)
+                buf.seek(0)
                 return StreamingResponse(
-                    io.BytesIO(content.encode("cp1252", errors="replace")),
-                    media_type="application/octet-stream",
+                    buf,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={
-                        "Content-Disposition": f'attachment; filename="{filename}.dat"',
+                        "Content-Disposition": f'attachment; filename="{filename}.xlsx"',
                         "X-Export-Summary": quote(summary),
                     },
                 )
-            buf = io.BytesIO()
-            write_slsp_xlsx(merged, buf, report_type=slsp_type)
-            buf.seek(0)
-            return StreamingResponse(
-                buf,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}.xlsx"',
-                    "X-Export-Summary": quote(summary),
-                },
-            )
 
-        elif report_type == "qap":
-            bills = fetch_posted_bills(conn, ["in_invoice", "in_refund"], date_from, date_to)
-            jes = fetch_journal_entries_with_wht(conn, date_from, date_to)
-            bill_rows = _extract_qap_rows(conn, bills, "bill")
-            je_rows = _extract_qap_rows(conn, jes, "journal_entry")
-            merged = build_qap_rows(bill_rows, je_rows)
+            elif report_type == "qap":
+                bills = fetch_posted_bills(conn, ["in_invoice", "in_refund"], date_from, date_to)
+                jes = fetch_journal_entries_with_wht(conn, date_from, date_to)
+                bill_rows = _extract_qap_rows(conn, bills, "bill")
+                je_rows = _extract_qap_rows(conn, jes, "journal_entry")
+                merged = build_qap_rows(bill_rows, je_rows)
 
-            summary = f"{len(bill_rows)} bills + {len(je_rows)} journal entries = {len(merged)} total"
-            filename = f"QAP_{date_from}_to_{date_to}_{client['db']}"
+                summary = f"{len(bill_rows)} bills + {len(je_rows)} journal entries = {len(merged)} total"
+                filename = f"QAP_{date_from}_to_{date_to}_{safe_db}"
 
-            if format == "dat":
-                content = write_qap_dat(merged)
+                if format == "dat":
+                    content = write_qap_dat(merged)
+                    return StreamingResponse(
+                        io.BytesIO(content.encode("cp1252", errors="replace")),
+                        media_type="application/octet-stream",
+                        headers={
+                            "Content-Disposition": f'attachment; filename="{filename}.dat"',
+                            "X-Export-Summary": quote(summary),
+                        },
+                    )
+                buf = io.BytesIO()
+                write_qap_xlsx(merged, buf)
+                buf.seek(0)
                 return StreamingResponse(
-                    io.BytesIO(content.encode("cp1252", errors="replace")),
-                    media_type="application/octet-stream",
+                    buf,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={
-                        "Content-Disposition": f'attachment; filename="{filename}.dat"',
+                        "Content-Disposition": f'attachment; filename="{filename}.xlsx"',
                         "X-Export-Summary": quote(summary),
                     },
                 )
-            buf = io.BytesIO()
-            write_qap_xlsx(merged, buf)
-            buf.seek(0)
-            return StreamingResponse(
-                buf,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}.xlsx"',
-                    "X-Export-Summary": quote(summary),
-                },
-            )
 
-        return JSONResponse({"detail": f"Unknown report type: {report_type}"}, status_code=400)
+            return JSONResponse({"detail": f"Unknown report type: {report_type}"}, status_code=400)
+
+        except Exception as e:
+            log.exception("Export failed for db=%s report=%s", db_name, report_type)
+            return JSONResponse({"detail": "Export failed — check server logs"}, status_code=500)
 
 
 if __name__ == "__main__":
