@@ -169,7 +169,7 @@ def classify_purchase(conn: OdooConnection, account_id: int) -> str:
 
 def fetch_companies(conn: OdooConnection) -> list[dict]:
     """Fetch all companies accessible to the authenticated user."""
-    fields = ["id", "name", "vat", "street", "city"]
+    fields = ["id", "name", "vat", "street", "city", "l10n_ph_rdo"]
     return _execute(conn, "res.company", "search_read", [[]], {"fields": fields})
 
 
