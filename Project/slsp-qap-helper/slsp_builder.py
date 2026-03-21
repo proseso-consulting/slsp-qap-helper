@@ -13,7 +13,7 @@ from typing import BinaryIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
-from bir_format import slp_dat_line, sls_dat_line, fmt_date_slsp
+from bir_format import slp_dat_line, sls_dat_line, slp_dat_header, sls_dat_header, fmt_date_slsp
 
 SLP_COLUMNS = [
     "TIN", "Registered Name", "Address",
@@ -27,6 +27,30 @@ SLS_COLUMNS = [
     "Exempt Amount", "Zero-Rated Amount",
     "Taxable Amount", "Output Tax", "Source",
 ]
+
+
+_AMOUNT_FIELDS = frozenset([
+    "exempt_amount", "zero_rated_amount",
+    "services_amount", "capital_goods_amount", "other_goods_amount", "input_tax",
+    "taxable_amount", "tax_amount",
+])
+
+
+def aggregate_by_tin(rows: list[dict]) -> list[dict]:
+    """Collapse rows to one entry per TIN, summing all amount fields.
+
+    Non-amount fields (name, address, etc.) are taken from the first occurrence
+    of each TIN. This mirrors the SUMIFS-per-TIN logic in the BIR spreadsheet
+    — the DAT format requires one D record per counterparty, not one per invoice.
+    """
+    groups: dict[str, dict] = {}
+    for row in rows:
+        tin = row["tin"]
+        if tin not in groups:
+            groups[tin] = {**row, **{f: 0.0 for f in _AMOUNT_FIELDS}}
+        for f in _AMOUNT_FIELDS:
+            groups[tin][f] = round(groups[tin][f] + row.get(f, 0.0), 2)
+    return list(groups.values())
 
 
 def build_slsp_rows(bill_rows: list[dict], je_rows: list[dict]) -> list[dict]:
@@ -90,13 +114,31 @@ def write_slsp_dat(
     rows: list[dict],
     report_type: str = "purchases",
     filing_tin: str = "000000000",
+    period_end: str = "",
+    company: dict | None = None,
 ) -> str:
-    """Build DAT file content as a string."""
+    """Build DAT file content as a string.
+
+    If company is supplied, prepends an H record with filing-entity details and
+    period totals — required for BIR-valid DAT files.
+    period_end: YYYY-MM-DD (e.g. "2025-11-30"). When provided, every D row uses
+    this as its date (per BIR spec — D rows carry the period end date, not
+    individual transaction dates).
+    """
     if not rows:
         return ""
-    lines = []
+
+    period_fmt = fmt_date_slsp(period_end) if period_end else ""
     line_fn = slp_dat_line if report_type == "purchases" else sls_dat_line
+    header_fn = slp_dat_header if report_type == "purchases" else sls_dat_header
+
+    lines = []
+    if company and period_fmt:
+        lines.append(header_fn(company, rows, period_fmt))
+
     for row in rows:
-        dat_row = {**row, "date": fmt_date_slsp(row["date"])}
+        row_date = period_fmt if period_fmt else fmt_date_slsp(row["date"])
+        dat_row = {**row, "date": row_date}
         lines.append(line_fn(dat_row, filing_tin=filing_tin))
+
     return "\r\n".join(lines) + "\r\n"

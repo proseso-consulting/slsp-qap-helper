@@ -100,6 +100,67 @@ def sls_dat_line(row: dict, filing_tin: str) -> str:
     return ",".join(parts)
 
 
+def sls_dat_header(company: dict, rows: list[dict], period: str) -> str:
+    """Build the H record for SLS (Summary List of Sales).
+
+    Columns (16): H,S,TIN,Name,First,Middle,Last,Name,Street,City,
+                  ExemptTotal,ZeroTotal,TaxableTotal,VATTotal,RDO,Period
+    company keys: tin, registered_name, first_name, middle_name, last_name,
+                  street, city, rdo
+    period: MM/DD/YYYY
+    """
+    tin = company.get("tin", "000000000")
+    name = _q(clean_str(company.get("registered_name", ""), 50))
+    first = _q(clean_str(company.get("first_name", ""), 50))
+    middle = _q(clean_str(company.get("middle_name", ""), 50))
+    last = _q(clean_str(company.get("last_name", ""), 50))
+    street = _q(clean_str(company.get("street", ""), 50))
+    city = _q(clean_str(company.get("city", ""), 50))
+    rdo = str(company.get("rdo", "")).strip()
+    parts = [
+        "H", "S", tin,
+        name, first, middle, last, name, street, city,
+        _n(sum(r.get("exempt_amount", 0) for r in rows)),
+        _n(sum(r.get("zero_rated_amount", 0) for r in rows)),
+        _n(sum(r.get("taxable_amount", 0) for r in rows)),
+        _n(sum(r.get("tax_amount", 0) for r in rows)),
+        rdo, period,
+    ]
+    return ",".join(parts)
+
+
+def slp_dat_header(company: dict, rows: list[dict], period: str) -> str:
+    """Build the H record for SLP (Summary List of Purchases).
+
+    Columns (20): H,P,TIN,Name,First,Middle,Last,Name,Street,City,
+                  ExemptTotal,ZeroTotal,ServicesTotal,CapGoodsTotal,GoodsTotal,
+                  VATTotal,VATTotal,0,RDO,Period
+    The duplicate VATTotal and trailing 0 (importation placeholder) match
+    the BIR-accepted spreadsheet format.
+    """
+    tin = company.get("tin", "000000000")
+    name = _q(clean_str(company.get("registered_name", ""), 50))
+    first = _q(clean_str(company.get("first_name", ""), 50))
+    middle = _q(clean_str(company.get("middle_name", ""), 50))
+    last = _q(clean_str(company.get("last_name", ""), 50))
+    street = _q(clean_str(company.get("street", ""), 50))
+    city = _q(clean_str(company.get("city", ""), 50))
+    rdo = str(company.get("rdo", "")).strip()
+    t_vat = _n(sum(r.get("input_tax", 0) for r in rows))
+    parts = [
+        "H", "P", tin,
+        name, first, middle, last, name, street, city,
+        _n(sum(r.get("exempt_amount", 0) for r in rows)),
+        _n(sum(r.get("zero_rated_amount", 0) for r in rows)),
+        _n(sum(r.get("services_amount", 0) for r in rows)),
+        _n(sum(r.get("capital_goods_amount", 0) for r in rows)),
+        _n(sum(r.get("other_goods_amount", 0) for r in rows)),
+        t_vat, t_vat, "0",
+        rdo, period,
+    ]
+    return ",".join(parts)
+
+
 def qap_dat_line(row: dict, seq: int) -> str:
     """Build one QAP (Quarterly Alphalist of Payees) DAT detail line."""
     parts = [

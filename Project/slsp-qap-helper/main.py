@@ -35,7 +35,7 @@ from odoo_client import (
     fetch_client_tasks,
 )
 from bir_format import clean_tin, clean_branch_code, clean_str
-from slsp_builder import build_slsp_rows, write_slsp_xlsx, write_slsp_dat
+from slsp_builder import aggregate_by_tin, build_slsp_rows, write_slsp_xlsx, write_slsp_dat
 from qap_builder import build_qap_rows, write_qap_xlsx, write_qap_dat
 
 logging.basicConfig(level=logging.INFO)
@@ -278,6 +278,16 @@ def export_report(
     raw_vat = selected.get("vat", "")
     filing_tin = clean_tin(raw_vat)
     branch_code = clean_branch_code(raw_vat)
+    company_dict = {
+        "tin": filing_tin,
+        "registered_name": clean_str(selected.get("name", ""), 50),
+        "first_name": "",
+        "middle_name": "",
+        "last_name": "",
+        "street": clean_str(selected.get("street", ""), 50),
+        "city": clean_str(selected.get("city", ""), 50),
+        "rdo": selected.get("l10n_ph_rdo", ""),
+    }
 
     with get_semaphore(client["db"]):
         try:
@@ -320,7 +330,15 @@ def export_report(
                         zip_buf = io.BytesIO()
                         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                             for ym, month_rows in by_month.items():
-                                dat_content = write_slsp_dat(month_rows, report_type=slsp_type, filing_tin=filing_tin)
+                                yr, mo = map(int, ym.split("-"))
+                                period_end_ym = f"{yr}-{mo:02d}-{calendar.monthrange(yr, mo)[1]:02d}"
+                                dat_content = write_slsp_dat(
+                                    aggregate_by_tin(month_rows),
+                                    report_type=slsp_type,
+                                    filing_tin=filing_tin,
+                                    period_end=period_end_ym,
+                                    company=company_dict,
+                                )
                                 zf.writestr(_slsp_dat_filename(ym), dat_content.encode("cp1252", errors="replace"))
                         zip_buf.seek(0)
                         return StreamingResponse(
@@ -331,9 +349,15 @@ def export_report(
                                 "X-Export-Summary": quote(summary),
                             },
                         )
-                    # Single month — derive MMYYYY from date_from
+                    # Single month — period_end is date_to
                     ym_single = date_from[:7]
-                    content = write_slsp_dat(merged, report_type=slsp_type, filing_tin=filing_tin)
+                    content = write_slsp_dat(
+                        aggregate_by_tin(merged),
+                        report_type=slsp_type,
+                        filing_tin=filing_tin,
+                        period_end=date_to,
+                        company=company_dict,
+                    )
                     return StreamingResponse(
                         io.BytesIO(content.encode("cp1252", errors="replace")),
                         media_type="application/octet-stream",

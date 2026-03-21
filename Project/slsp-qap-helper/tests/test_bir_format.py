@@ -6,6 +6,8 @@ from bir_format import (
     fmt_date_slsp,
     fmt_date_qap,
     slp_dat_line,
+    sls_dat_header,
+    slp_dat_header,
     qap_dat_line,
 )
 
@@ -89,6 +91,69 @@ class TestSlpDatLine:
         assert "10000.00" in line
         assert "1200.00" in line
         assert line.endswith("999888777,01/15/2026")
+
+
+_SAMPLE_COMPANY = {
+    "tin": "005302695",
+    "registered_name": "FRENCH CHAMBER OF COMMERCE",
+    "first_name": "",
+    "middle_name": "",
+    "last_name": "",
+    "street": "UNIT 404 MADRIGAL BLDG",
+    "city": "MAKATI CITY",
+    "rdo": "050",
+}
+
+_SAMPLE_SLS_ROW = {
+    "exempt_amount": 0, "zero_rated_amount": 0,
+    "taxable_amount": 50000.00, "tax_amount": 6000.00,
+}
+
+_SAMPLE_SLP_ROW = {
+    "exempt_amount": 0, "zero_rated_amount": 0,
+    "services_amount": 30000.00, "capital_goods_amount": 0,
+    "other_goods_amount": 0, "input_tax": 3600.00,
+}
+
+
+class TestSlsDatHeader:
+    def test_starts_with_hs(self):
+        line = sls_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLS_ROW], "11/30/2025")
+        assert line.startswith("H,S,005302695,")
+
+    def test_has_16_fields(self):
+        line = sls_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLS_ROW], "11/30/2025")
+        assert len(line.split(",")) == 16
+
+    def test_totals_summed_from_rows(self):
+        rows = [_SAMPLE_SLS_ROW, {**_SAMPLE_SLS_ROW, "taxable_amount": 10000.00, "tax_amount": 1200.00}]
+        line = sls_dat_header(_SAMPLE_COMPANY, rows, "11/30/2025")
+        assert "60000.00" in line   # 50000 + 10000
+        assert "7200.00" in line    # 6000 + 1200
+
+    def test_rdo_and_period_at_end(self):
+        line = sls_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLS_ROW], "11/30/2025")
+        assert line.endswith(",050,11/30/2025")
+
+
+class TestSlpDatHeader:
+    def test_starts_with_hp(self):
+        line = slp_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLP_ROW], "11/30/2025")
+        assert line.startswith("H,P,005302695,")
+
+    def test_has_20_fields(self):
+        line = slp_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLP_ROW], "11/30/2025")
+        assert len(line.split(",")) == 20
+
+    def test_vat_duplicated_and_importation_zero(self):
+        line = slp_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLP_ROW], "11/30/2025")
+        # last 4 fields: vat,vat,0,rdo,period → split gives [...,3600.00,3600.00,0,050,11/30/2025]
+        fields = line.split(",")
+        assert fields[-5] == "3600.00"  # vat
+        assert fields[-4] == "3600.00"  # vat duplicate
+        assert fields[-3] == "0"        # importation placeholder
+        assert fields[-2] == "050"      # rdo
+        assert fields[-1] == "11/30/2025"
 
 
 class TestQapDatLine:
