@@ -17,8 +17,10 @@ import logging
 import os
 import re
 import threading as _threading
+import zipfile
 from datetime import date
 from datetime import date as date_type
+from itertools import groupby
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request, Query
@@ -297,6 +299,27 @@ def export_report(
                 filename = f"{label}_{date_from}_to_{date_to}_{safe_db}"
 
                 if format == "dat":
+                    # Group rows by month; if multi-month → ZIP, else single DAT
+                    sorted_rows = sorted(merged, key=lambda r: r.get("date", "")[:7])
+                    by_month = {
+                        ym: list(grp)
+                        for ym, grp in groupby(sorted_rows, key=lambda r: r.get("date", "")[:7])
+                    }
+                    if len(by_month) > 1:
+                        zip_buf = io.BytesIO()
+                        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                            for ym, month_rows in by_month.items():
+                                dat_content = write_slsp_dat(month_rows, report_type=slsp_type, filing_tin=filing_tin)
+                                zf.writestr(f"{label}_{ym}_{safe_db}.dat", dat_content.encode("cp1252", errors="replace"))
+                        zip_buf.seek(0)
+                        return StreamingResponse(
+                            zip_buf,
+                            media_type="application/zip",
+                            headers={
+                                "Content-Disposition": f'attachment; filename="{filename}.zip"',
+                                "X-Export-Summary": quote(summary),
+                            },
+                        )
                     content = write_slsp_dat(merged, report_type=slsp_type, filing_tin=filing_tin)
                     return StreamingResponse(
                         io.BytesIO(content.encode("cp1252", errors="replace")),
