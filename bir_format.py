@@ -27,9 +27,17 @@ def clean_branch_code(raw: str | None) -> str:
 
 
 def clean_str(raw: str | None, max_len: int = 50) -> str:
-    """Uppercase, sanitize special chars, collapse whitespace, truncate."""
+    """Uppercase, sanitize special chars, collapse whitespace, truncate.
+
+    BIR validation module rejects periods, commas, and apostrophes.
+    Mirrors the spreadsheet formula:
+      UPPER(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(val,".",""),",",""),"&","AND"),"'",""))
+    """
     s = str(raw or "").upper()
-    s = s.replace("&", "AND").replace("\u00d1", "N").replace("\u00f1", "N")
+    s = s.replace("&", "AND")
+    s = s.replace("\u00d1", "N").replace("\u00f1", "N")
+    for ch in ".,'\u2018\u2019\u201c\u201d":
+        s = s.replace(ch, "")
     s = " ".join(s.split())
     return s[:max_len]
 

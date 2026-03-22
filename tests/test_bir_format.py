@@ -42,6 +42,21 @@ class TestCleanStr:
     def test_replaces_enye(self):
         assert clean_str("Niño") == "NINO"
 
+    def test_removes_periods(self):
+        assert clean_str("Acme Corp.") == "ACME CORP"
+
+    def test_removes_commas(self):
+        assert clean_str("Smith, John") == "SMITH JOHN"
+
+    def test_removes_apostrophes(self):
+        assert clean_str("O'Brien") == "OBRIEN"
+
+    def test_removes_smart_quotes(self):
+        assert clean_str("test\u2018s\u2019") == "TESTS"
+
+    def test_bir_realistic_name(self):
+        assert clean_str("Air Liquide Pipeline Utilities Services (APLUS), Inc.", max_len=60) == "AIR LIQUIDE PIPELINE UTILITIES SERVICES (APLUS) INC"
+
     def test_collapses_whitespace(self):
         assert clean_str("a   b  c") == "A B C"
 
