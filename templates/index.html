@@ -147,7 +147,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="o-field-group">
+          <div class="o-field-group" id="companyGroup">
             <label class="o-label">Company</label>
             <select name="company_id" id="companySelect">
               <option value="">Loading...</option>
@@ -186,6 +186,7 @@
         companies.forEach(function(c) {
           addOption(sel, c.id, c.name + (c.vat ? ' (' + c.vat + ')' : ''));
         });
+        document.getElementById('companyGroup').style.display = companies.length <= 1 ? 'none' : '';
       } catch (err) {
         clearSelect(sel);
         addOption(sel, '', 'Failed to load companies');
