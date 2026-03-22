@@ -8,24 +8,24 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 14px; background: #f0ede8; color: #212529; min-height: 100vh;
+      font-size: 14px; background: #f8f9fa; color: #212529; min-height: 100vh;
     }
 
-    /* Odoo-style slim top navbar */
+    /* Odoo 19 navbar — white with mauve accent */
     .o-navbar {
-      background: #1c1c1c; color: #ffffffcc;
+      background: #fff; color: #212529; border-bottom: 1px solid #dee2e6;
       height: 46px; display: flex; align-items: center;
       padding: 0 16px; gap: 12px; position: sticky; top: 0; z-index: 100;
     }
     .o-navbar-logo {
-      width: 28px; height: 28px; background: #017e84;
+      width: 28px; height: 28px; background: #714B67;
       border-radius: 6px; display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 13px; color: white; flex-shrink: 0;
+      flex-shrink: 0;
     }
-    .o-navbar-app { font-size: 13px; font-weight: 500; color: white; }
-    .o-navbar-sep { opacity: 0.3; margin: 0 2px; }
+    .o-navbar-logo svg { width: 16px; height: 16px; }
+    .o-navbar-app { font-size: 13px; font-weight: 500; color: #212529; }
 
-    /* Odoo-style control panel */
+    /* Odoo 19 control panel */
     .o-control-panel {
       background: white; border-bottom: 1px solid #dee2e6;
       padding: 0 24px; display: flex; align-items: center;
@@ -40,14 +40,14 @@
     .o-breadcrumb-sep { color: #adb5bd; font-size: 11px; }
     .o-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-    /* Odoo-style buttons */
+    /* Odoo 19 buttons */
     .btn {
       padding: 5px 16px; border-radius: 4px; font-size: 13px;
       font-family: inherit; font-weight: 400; cursor: pointer;
-      border: 1px solid transparent; transition: all 0.1s; white-space: nowrap;
+      border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
     }
-    .btn-primary { background: #017e84; color: white; border-color: #017e84; }
-    .btn-primary:hover { background: #016a6f; border-color: #016a6f; }
+    .btn-primary { background: #714B67; color: white; border-color: #714B67; }
+    .btn-primary:hover { background: #5f3d56; border-color: #5f3d56; }
     .btn-secondary { background: white; color: #212529; border-color: #dee2e6; }
     .btn-secondary:hover { background: #f8f9fa; }
     .btn-loading { opacity: 0.65; cursor: wait; }
@@ -55,10 +55,10 @@
     /* Page content */
     .o-content { padding: 24px; }
 
-    /* Odoo-style form sheet */
+    /* Odoo 19 form sheet */
     .o-sheet {
       background: white; border-radius: 4px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      border: 1px solid #dee2e6;
       max-width: 680px; margin: 0 auto; overflow: hidden;
     }
     .o-sheet-header {
@@ -68,29 +68,30 @@
     .o-sheet-subtitle { font-size: 12px; color: #6c757d; padding-bottom: 14px; }
     .o-sheet-body { padding: 20px 24px 24px; }
 
-    /* Odoo-style field groups */
+    /* Odoo 19 field groups */
     .o-field-group { margin-bottom: 16px; }
     .o-field-group:last-of-type { margin-bottom: 0; }
     .o-label {
       display: block; font-size: 12px; font-weight: 400;
-      color: rgba(0,0,0,0.45); margin-bottom: 4px;
+      color: rgba(0,0,0,0.45); margin-bottom: 4px; text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
-    select, input[type="date"] {
+    select, input[type="month"] {
       width: 100%; padding: 5px 10px; border: 1px solid #dee2e6;
       border-radius: 4px; font-size: 13.5px; font-family: inherit;
       background: white; color: #212529; outline: none;
-      transition: border-color 0.1s;
+      transition: border-color 0.15s;
     }
-    select:focus, input[type="date"]:focus { border-color: #017e84; }
+    select:focus, input[type="month"]:focus { border-color: #714B67; }
 
     .o-row { display: flex; gap: 16px; }
     .o-row > .o-field-group { flex: 1; }
 
     /* Result banner */
     .result {
-      background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460;
+      background: #f3eef2; border: 1px solid #d4c5d0; color: #4a2f44;
       padding: 10px 16px; border-radius: 4px; font-size: 13px;
-      margin: 12px 24px 0; display: none;
+      margin: 12px 0 0; display: none;
     }
     .result.show { display: block; }
     .result.error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
@@ -98,13 +99,15 @@
 </head>
 <body>
 
-  <!-- Odoo-style top navbar -->
+  <!-- Odoo 19 navbar -->
   <nav class="o-navbar">
-    <div class="o-navbar-logo">A</div>
+    <div class="o-navbar-logo">
+      <svg viewBox="0 0 16 16" fill="white"><path d="M8 2C4.7 2 2 4.7 2 8s2.7 6 6 6 6-2.7 6-6-2.7-6-6-6zm0 9.5c-1.9 0-3.5-1.6-3.5-3.5S6.1 4.5 8 4.5s3.5 1.6 3.5 3.5S9.9 11.5 8 11.5z"/></svg>
+    </div>
     <span class="o-navbar-app">Accounting</span>
   </nav>
 
-  <!-- Odoo-style control panel -->
+  <!-- Odoo 19 control panel -->
   <div class="o-control-panel">
     <div class="o-breadcrumb">
       <span class="o-breadcrumb-item">Reporting</span>
@@ -150,18 +153,15 @@
               <option value="">Loading...</option>
             </select>
           </div>
-          <div class="o-row">
-            <div class="o-field-group">
-              <label class="o-label">Date From</label>
-              <input type="date" name="date_from" value="{{ default_date_from }}">
-            </div>
-            <div class="o-field-group">
-              <label class="o-label">Date To</label>
-              <input type="date" name="date_to" value="{{ default_date_to }}">
-            </div>
+          <div class="o-field-group">
+            <label class="o-label">Period</label>
+            <input type="month" name="period" value="{{ default_period }}">
           </div>
+          <!-- hidden fields computed from period by JS -->
+          <input type="hidden" name="date_from" id="hiddenDateFrom">
+          <input type="hidden" name="date_to" id="hiddenDateTo">
         </form>
-        <div id="result" class="result" style="margin: 12px 0 0;"></div>
+        <div id="result" class="result"></div>
       </div>
     </div>
   </div>
@@ -196,7 +196,23 @@
     });
     loadCompanies(document.getElementById('dbSelect').value);
 
+    /* Compute date_from / date_to from the month picker */
+    function syncPeriod() {
+      var val = document.querySelector('[name="period"]').value;
+      if (!val) return;
+      var parts = val.split('-');
+      var year = parseInt(parts[0]), month = parseInt(parts[1]);
+      var firstDay = year + '-' + String(month).padStart(2, '0') + '-01';
+      var lastDay = new Date(year, month, 0).getDate();
+      var lastDate = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+      document.getElementById('hiddenDateFrom').value = firstDay;
+      document.getElementById('hiddenDateTo').value = lastDate;
+    }
+    document.querySelector('[name="period"]').addEventListener('change', syncPeriod);
+    syncPeriod();
+
     async function doExport(format) {
+      syncPeriod();
       var btn = format === 'xlsx' ? document.getElementById('btnXlsx') : document.getElementById('btnDat');
       var origText = btn.textContent;
       var resultEl = document.getElementById('result');

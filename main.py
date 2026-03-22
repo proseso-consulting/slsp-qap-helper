@@ -213,12 +213,12 @@ def index(token: str, request: Request):
     if err:
         return err
     clients = _load_clients()
-    date_from, date_to = _default_quarter_dates()
+    today = date.today()
+    default_period = f"{today.year}-{today.month:02d}"
     return templates.TemplateResponse("index.html", {
         "request": request,
         "clients": clients,
-        "default_date_from": date_from,
-        "default_date_to": date_to,
+        "default_period": default_period,
     })
 
 
