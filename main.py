@@ -208,7 +208,7 @@ def _extract_qap_rows(conn, moves, source_label, partners_cache=None):
 
 
 @app.get("/{token}/", response_class=HTMLResponse)
-def index(token: str, request: Request):
+def index(token: str, request: Request, db: str = Query(default="")):
     err = _check_token(token)
     if err:
         return err
@@ -219,6 +219,7 @@ def index(token: str, request: Request):
         "request": request,
         "clients": clients,
         "default_period": default_period,
+        "locked_db": db,
     })
 
 

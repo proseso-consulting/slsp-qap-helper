@@ -139,11 +139,11 @@
               <option value="qap">QAP — Quarterly Alphalist of Payees</option>
             </select>
           </div>
-          <div class="o-field-group">
+          <div class="o-field-group" id="dbGroup" {% if locked_db %}style="display:none"{% endif %}>
             <label class="o-label">Database</label>
             <select name="db_name" id="dbSelect">
               {% for client in clients %}
-              <option value="{{ client.db }}">{{ client.name }}</option>
+              <option value="{{ client.db }}" {% if client.db == locked_db %}selected{% endif %}>{{ client.name }}</option>
               {% endfor %}
             </select>
           </div>
