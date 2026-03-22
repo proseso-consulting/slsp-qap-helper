@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+
+# Node (design doc prototype)
+node_modules/
+
+# IDE / tools
+.vscode/
+.claude/
+.playwright-mcp/
