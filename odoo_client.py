@@ -186,7 +186,7 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
     """Query project.task records from source Odoo to get target client databases.
 
     Returns list of dicts: {"name", "url", "db", "user", "api_key"}
-    Only includes tasks with x_studio_enabled=True and x_studio_odoo_bill_worker=True.
+    Includes any task that has accounting database, email, and API key populated.
     """
     FIELDS = [
         "id", "project_id",
@@ -195,9 +195,9 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
         "x_studio_api_key",
     ]
     domain = [
-        ["stage_id.name", "=", "General"],
-        ["x_studio_enabled", "=", True],
-        ["x_studio_odoo_bill_worker", "=", True],
+        ["x_studio_accounting_database", "!=", False],
+        ["x_studio_email", "!=", False],
+        ["x_studio_api_key", "!=", False],
     ]
     tasks = _execute(conn, "project.task", "search_read", [domain], {"fields": FIELDS})
     clients = []
