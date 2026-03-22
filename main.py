@@ -280,6 +280,7 @@ def export_report(
     branch_code = clean_branch_code(raw_vat)
     company_dict = {
         "tin": filing_tin,
+        "raw_vat": raw_vat,
         "registered_name": clean_str(selected.get("name", ""), 50),
         "first_name": "",
         "middle_name": "",
@@ -398,7 +399,9 @@ def export_report(
                     # BIR filename: <TIN><BC><MMYYYY><FormType>.DAT  e.g. 005302695000003202 61601EQ.DAT
                     qap_year, qap_month = date_to[:4], date_to[5:7]
                     qap_dat_name = f"{filing_tin}{branch_code}{qap_month}{qap_year}1601EQ.DAT"
-                    content = write_qap_dat(merged)
+                    content = write_qap_dat(
+                        merged, company=company_dict, period_end=date_to,
+                    )
                     return StreamingResponse(
                         io.BytesIO(content.encode("cp1252", errors="replace")),
                         media_type="application/octet-stream",

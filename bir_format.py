@@ -169,8 +169,41 @@ def slp_dat_header(company: dict, rows: list[dict], period: str) -> str:
     return ",".join(parts)
 
 
+def qap_dat_header(company: dict, period: str) -> str:
+    """Build the HQAP header record for QAP DAT.
+
+    Fields (7): HQAP, H1601EQ, TIN, BranchCode, "CompanyName", Period(MM/YYYY), RDO
+    """
+    tin = clean_tin(company.get("tin", ""))
+    bc = clean_branch_code(company.get("raw_vat", company.get("tin", "")))
+    name = _q(clean_str(company.get("registered_name", ""), 50))
+    rdo = str(company.get("rdo", "")).strip()
+    return ",".join(["HQAP", "H1601EQ", tin, bc, name, period, rdo])
+
+
+def qap_dat_control(company: dict, rows: list[dict], period: str) -> str:
+    """Build the C1 control/totals record for QAP DAT.
+
+    Fields (7): C1, 1601EQ, TIN, BranchCode, Period, TotalGross, TotalTax
+    """
+    tin = clean_tin(company.get("tin", ""))
+    bc = clean_branch_code(company.get("raw_vat", company.get("tin", "")))
+    total_gross = sum(r.get("gross_income", 0) for r in rows)
+    total_tax = sum(r.get("tax_withheld", 0) for r in rows)
+    return ",".join(["C1", "1601EQ", tin, bc, period, _n(total_gross), _n(total_tax)])
+
+
+def _qap_name(val: str) -> str:
+    """Quote a name field for QAP — leave empty strings unquoted."""
+    return _q(val) if val else ""
+
+
 def qap_dat_line(row: dict, seq: int) -> str:
-    """Build one QAP (Quarterly Alphalist of Payees) DAT detail line."""
+    """Build one QAP (Quarterly Alphalist of Payees) DAT detail line.
+
+    Fields (14): D1, 1601EQ, Seq, TIN, BranchCode, "Name", Last, First, Middle,
+                 Period(MM/YYYY), ATC, TaxRate, GrossIncome, TaxWithheld
+    """
     parts = [
         "D1",
         "1601EQ",
@@ -178,12 +211,12 @@ def qap_dat_line(row: dict, seq: int) -> str:
         row["tin"],
         "0000",
         _q(row["registered_name"]),
-        _q(row.get("last_name", "")),
-        _q(row.get("first_name", "")),
-        _q(row.get("middle_name", "")),
+        _qap_name(row.get("last_name", "")),
+        _qap_name(row.get("first_name", "")),
+        _qap_name(row.get("middle_name", "")),
         row["date"],
         str(row.get("atc", "")),
-        str(row.get("tax_rate", 0)),
+        _n(row.get("tax_rate", 0)),
         _n(row.get("gross_income", 0)),
         _n(row.get("tax_withheld", 0)),
     ]

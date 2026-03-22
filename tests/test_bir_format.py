@@ -3,12 +3,15 @@ import pytest
 from bir_format import (
     clean_tin,
     clean_str,
+    clean_branch_code,
     fmt_date_slsp,
     fmt_date_qap,
     slp_dat_line,
     sls_dat_header,
     slp_dat_header,
     qap_dat_line,
+    qap_dat_header,
+    qap_dat_control,
 )
 
 
@@ -190,3 +193,97 @@ class TestQapDatLine:
         assert "WI010" in line
         assert "50000.00" in line
         assert "5000.00" in line
+        assert "10.00" in line  # tax_rate formatted as 2 decimal
+
+    def test_empty_names_unquoted(self):
+        row = {
+            "tin": "123456789",
+            "registered_name": "ACME CORP",
+            "last_name": "",
+            "first_name": "",
+            "middle_name": "",
+            "date": "03/2026",
+            "atc": "WC120",
+            "tax_rate": 2,
+            "gross_income": 9000.00,
+            "tax_withheld": 180.00,
+        }
+        line = qap_dat_line(row, seq=1)
+        fields = line.split(",")
+        # Fields 6,7,8 = last, first, middle — empty means unquoted empty
+        assert fields[6] == ""
+        assert fields[7] == ""
+        assert fields[8] == ""
+
+    def test_populated_names_quoted(self):
+        row = {
+            "tin": "123456789",
+            "registered_name": "ACME CORP",
+            "last_name": "SMITH",
+            "first_name": "JOHN",
+            "middle_name": "A",
+            "date": "03/2026",
+            "atc": "WC120",
+            "tax_rate": 2,
+            "gross_income": 9000.00,
+            "tax_withheld": 180.00,
+        }
+        line = qap_dat_line(row, seq=1)
+        assert '"SMITH"' in line
+        assert '"JOHN"' in line
+        assert '"A"' in line
+
+
+_SAMPLE_QAP_COMPANY = {
+    "tin": "330593174",
+    "raw_vat": "3305931740000",
+    "registered_name": "PROSESO ACCOUNTING TEST",
+    "first_name": "",
+    "middle_name": "",
+    "last_name": "",
+    "street": "",
+    "city": "",
+    "rdo": "050",
+}
+
+
+class TestQapDatHeader:
+    def test_starts_with_hqap(self):
+        line = qap_dat_header(_SAMPLE_QAP_COMPANY, "03/2026")
+        assert line.startswith("HQAP,H1601EQ,330593174,0000,")
+
+    def test_has_7_fields(self):
+        line = qap_dat_header(_SAMPLE_QAP_COMPANY, "03/2026")
+        fields = line.split(",")
+        assert len(fields) == 7
+
+    def test_period_and_rdo_at_end(self):
+        line = qap_dat_header(_SAMPLE_QAP_COMPANY, "03/2026")
+        assert line.endswith(",03/2026,050")
+
+    def test_name_is_quoted(self):
+        line = qap_dat_header(_SAMPLE_QAP_COMPANY, "03/2026")
+        assert '"PROSESO ACCOUNTING TEST"' in line
+
+
+class TestQapDatControl:
+    def test_starts_with_c1(self):
+        rows = [{"gross_income": 9000.0, "tax_withheld": 180.0}]
+        line = qap_dat_control(_SAMPLE_QAP_COMPANY, rows, "03/2026")
+        assert line.startswith("C1,1601EQ,330593174,0000,")
+
+    def test_has_7_fields(self):
+        rows = [{"gross_income": 9000.0, "tax_withheld": 180.0}]
+        line = qap_dat_control(_SAMPLE_QAP_COMPANY, rows, "03/2026")
+        fields = line.split(",")
+        assert len(fields) == 7
+
+    def test_sums_totals(self):
+        rows = [
+            {"gross_income": 9000.0, "tax_withheld": 180.0},
+            {"gross_income": 8200.0, "tax_withheld": 164.0},
+            {"gross_income": 5000.0, "tax_withheld": 250.0},
+        ]
+        line = qap_dat_control(_SAMPLE_QAP_COMPANY, rows, "03/2026")
+        assert "22200.00" in line
+        assert "594.00" in line

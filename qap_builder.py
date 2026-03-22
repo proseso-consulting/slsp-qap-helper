@@ -11,7 +11,7 @@ from typing import BinaryIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
-from bir_format import qap_dat_line, fmt_date_qap
+from bir_format import qap_dat_line, qap_dat_header, qap_dat_control, fmt_date_qap
 
 QAP_COLUMNS = [
     "Taxpayer ID Number",
@@ -65,12 +65,26 @@ def write_qap_xlsx(rows: list[dict], output: BinaryIO) -> None:
     wb.save(output)
 
 
-def write_qap_dat(rows: list[dict]) -> str:
-    """Build QAP DAT file content as a string with sequential row numbers."""
+def write_qap_dat(
+    rows: list[dict],
+    *,
+    company: dict | None = None,
+    period_end: str | None = None,
+) -> str:
+    """Build QAP DAT file content: HQAP header, D1 detail lines, C1 control totals.
+
+    When company and period_end are provided the output includes HQAP and C1 records.
+    period_end is 'YYYY-MM-DD' — converted to 'MM/YYYY' for DAT.
+    """
     if not rows:
         return ""
+    period_mm_yyyy = fmt_date_qap(period_end) if period_end else ""
     lines = []
+    if company and period_end:
+        lines.append(qap_dat_header(company, period_mm_yyyy))
     for seq, row in enumerate(rows, 1):
-        dat_row = {**row, "date": fmt_date_qap(row["date"])}
+        dat_row = {**row, "date": period_mm_yyyy or fmt_date_qap(row["date"])}
         lines.append(qap_dat_line(dat_row, seq=seq))
+    if company and period_end:
+        lines.append(qap_dat_control(company, rows, period_mm_yyyy))
     return "\r\n".join(lines) + "\r\n"
