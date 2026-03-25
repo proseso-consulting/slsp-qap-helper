@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import BinaryIO
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Alignment, Font, PatternFill
 
-from bir_format import qap_dat_line, qap_dat_header, qap_dat_control, fmt_date_qap
+from bir_format import fmt_date_qap, qap_dat_control, qap_dat_header, qap_dat_line
 
 QAP_COLUMNS = [
     "Taxpayer ID Number",

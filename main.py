@@ -23,20 +23,27 @@ from datetime import date as date_type
 from itertools import groupby
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request, Query
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi import FastAPI, Form, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from bir_format import clean_branch_code, clean_str, clean_tin
 from odoo_client import (
     OdooConnection,
-    connect, fetch_posted_bills, fetch_journal_entries_with_wht,
-    fetch_partner_details, fetch_partners_by_ids, fetch_bill_lines_with_tax,
-    fetch_tax_details, classify_purchase, get_companies, get_semaphore,
+    classify_purchase,
+    connect,
+    fetch_bill_lines_with_tax,
     fetch_client_tasks,
+    fetch_journal_entries_with_wht,
+    fetch_partner_details,
+    fetch_partners_by_ids,
+    fetch_posted_bills,
+    fetch_tax_details,
+    get_companies,
+    get_semaphore,
 )
-from bir_format import clean_tin, clean_branch_code, clean_str
-from slsp_builder import aggregate_by_tin, build_slsp_rows, write_slsp_xlsx, write_slsp_dat
-from qap_builder import build_qap_rows, write_qap_xlsx, write_qap_dat
+from qap_builder import build_qap_rows, write_qap_dat, write_qap_xlsx
+from slsp_builder import aggregate_by_tin, build_slsp_rows, write_slsp_dat, write_slsp_xlsx
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -152,21 +159,25 @@ def _extract_slsp_rows(conn, moves, report_type, source_label, partners_cache=No
                     "source": source_label,
                 }
                 if report_type == "purchases":
-                    row.update({
-                        "exempt_amount": 0,
-                        "zero_rated_amount": 0,
-                        "services_amount": gross if category == "services" else 0,
-                        "capital_goods_amount": gross if category == "capital_goods" else 0,
-                        "other_goods_amount": gross if category == "other_than_capital_goods" else 0,
-                        "input_tax": tax_amt,
-                    })
+                    row.update(
+                        {
+                            "exempt_amount": 0,
+                            "zero_rated_amount": 0,
+                            "services_amount": gross if category == "services" else 0,
+                            "capital_goods_amount": gross if category == "capital_goods" else 0,
+                            "other_goods_amount": gross if category == "other_than_capital_goods" else 0,
+                            "input_tax": tax_amt,
+                        }
+                    )
                 else:
-                    row.update({
-                        "exempt_amount": 0,
-                        "zero_rated_amount": 0,
-                        "taxable_amount": gross,
-                        "tax_amount": tax_amt,
-                    })
+                    row.update(
+                        {
+                            "exempt_amount": 0,
+                            "zero_rated_amount": 0,
+                            "taxable_amount": gross,
+                            "tax_amount": tax_amt,
+                        }
+                    )
                 rows.append(row)
     return rows
 
@@ -191,19 +202,21 @@ def _extract_qap_rows(conn, moves, source_label, partners_cache=None):
                 if not atc or tax.get("type_tax_use") != "purchase":
                     continue
                 gross = abs(line.get("price_subtotal", 0))
-                rows.append({
-                    "tin": clean_tin(partner.get("vat", "")),
-                    "registered_name": clean_str(partner.get("name", ""), 50),
-                    "last_name": clean_str(partner.get("last_name", ""), 30),
-                    "first_name": clean_str(partner.get("first_name", ""), 30),
-                    "middle_name": clean_str(partner.get("middle_name", ""), 30),
-                    "date": move["date"],
-                    "atc": atc,
-                    "tax_rate": abs(tax.get("amount", 0)),
-                    "gross_income": gross,
-                    "tax_withheld": round(gross * abs(tax["amount"]) / 100, 2),
-                    "source": source_label,
-                })
+                rows.append(
+                    {
+                        "tin": clean_tin(partner.get("vat", "")),
+                        "registered_name": clean_str(partner.get("name", ""), 50),
+                        "last_name": clean_str(partner.get("last_name", ""), 30),
+                        "first_name": clean_str(partner.get("first_name", ""), 30),
+                        "middle_name": clean_str(partner.get("middle_name", ""), 30),
+                        "date": move["date"],
+                        "atc": atc,
+                        "tax_rate": abs(tax.get("amount", 0)),
+                        "gross_income": gross,
+                        "tax_withheld": round(gross * abs(tax["amount"]) / 100, 2),
+                        "source": source_label,
+                    }
+                )
     return rows
 
 
@@ -215,12 +228,15 @@ def index(token: str, request: Request, db: str = Query(default="")):
     clients = _load_clients()
     today = date.today()
     default_period = f"{today.year}-{today.month:02d}"
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "clients": clients,
-        "default_period": default_period,
-        "locked_db": db,
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "clients": clients,
+            "default_period": default_period,
+            "locked_db": db,
+        },
+    )
 
 
 @app.get("/{token}/companies")
@@ -269,8 +285,7 @@ def export_report(
         return JSONResponse({"detail": "Database not found"}, status_code=400)
 
     try:
-        conn = connect(client["url"], client["db"], client["user"], client["api_key"],
-                       company_id=company_id)
+        conn = connect(client["url"], client["db"], client["user"], client["api_key"], company_id=company_id)
     except ConnectionError as e:
         return JSONResponse({"detail": str(e)}, status_code=502)
 
@@ -295,10 +310,7 @@ def export_report(
         try:
             if report_type in ("slsp_purchases", "slsp_sales"):
                 slsp_type = "purchases" if report_type == "slsp_purchases" else "sales"
-                move_types = (
-                    ["in_invoice", "in_refund"] if slsp_type == "purchases"
-                    else ["out_invoice", "out_refund"]
-                )
+                move_types = ["in_invoice", "in_refund"] if slsp_type == "purchases" else ["out_invoice", "out_refund"]
                 bills = fetch_posted_bills(conn, move_types, date_from, date_to)
                 jes = fetch_journal_entries_with_wht(conn, date_from, date_to)
                 _all_slsp_pids = set()
@@ -324,10 +336,7 @@ def export_report(
                 if format == "dat":
                     # Group rows by month; if multi-month → ZIP, else single DAT
                     sorted_rows = sorted(merged, key=lambda r: r.get("date", "")[:7])
-                    by_month = {
-                        ym: list(grp)
-                        for ym, grp in groupby(sorted_rows, key=lambda r: r.get("date", "")[:7])
-                    }
+                    by_month = {ym: list(grp) for ym, grp in groupby(sorted_rows, key=lambda r: r.get("date", "")[:7])}
                     if len(by_month) > 1:
                         zip_buf = io.BytesIO()
                         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -401,7 +410,9 @@ def export_report(
                     qap_year, qap_month = date_to[:4], date_to[5:7]
                     qap_dat_name = f"{filing_tin}{branch_code}{qap_month}{qap_year}1601EQ.DAT"
                     content = write_qap_dat(
-                        merged, company=company_dict, period_end=date_to,
+                        merged,
+                        company=company_dict,
+                        period_end=date_to,
                     )
                     return StreamingResponse(
                         io.BytesIO(content.encode("cp1252", errors="replace")),
@@ -425,12 +436,13 @@ def export_report(
 
             return JSONResponse({"detail": f"Unknown report type: {report_type}"}, status_code=400)
 
-        except Exception as e:
+        except Exception:
             log.exception("Export failed for db=%s report=%s", db_name, report_type)
             return JSONResponse({"detail": "Export failed — check server logs"}, status_code=500)
 
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)

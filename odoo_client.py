@@ -48,7 +48,7 @@ def connect(url: str, db: str, user: str, api_key: str, company_id: int | None =
     try:
         uid = common.authenticate(db, user, api_key, {})
     except xmlrpc.client.Fault as e:
-        raise ConnectionError(f"Odoo auth failed for {db}: {e.faultString[:200]}")
+        raise ConnectionError(f"Odoo auth failed for {db}: {e.faultString[:200]}") from e
     if not uid:
         raise ConnectionError(f"Odoo auth returned uid=0 for {db} — check credentials")
     models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
@@ -79,8 +79,13 @@ def fetch_posted_bills(
         ("date", "<=", date_to),
     ]
     fields = [
-        "name", "date", "ref", "partner_id",
-        "amount_total", "amount_untaxed", "line_ids",
+        "name",
+        "date",
+        "ref",
+        "partner_id",
+        "amount_total",
+        "amount_untaxed",
+        "line_ids",
     ]
     return _execute(conn, "account.move", "search_read", [domain], {"fields": fields})
 
@@ -93,8 +98,13 @@ def fetch_bill_lines_with_tax(conn: OdooConnection, move_id: int) -> list[dict]:
         ("display_type", "=", "product"),
     ]
     fields = [
-        "name", "debit", "credit", "partner_id",
-        "account_id", "tax_ids", "price_subtotal",
+        "name",
+        "debit",
+        "credit",
+        "partner_id",
+        "account_id",
+        "tax_ids",
+        "price_subtotal",
     ]
     return _execute(conn, "account.move.line", "search_read", [domain], {"fields": fields})
 
@@ -137,8 +147,13 @@ def fetch_journal_entries_with_wht(
 def fetch_partner_details(conn: OdooConnection, partner_id: int) -> dict:
     """Get TIN, name parts, and address for a partner."""
     fields = [
-        "name", "vat", "first_name", "middle_name",
-        "last_name", "street", "city",
+        "name",
+        "vat",
+        "first_name",
+        "middle_name",
+        "last_name",
+        "street",
+        "city",
     ]
     result = _execute(conn, "res.partner", "read", [[partner_id]], {"fields": fields})
     return result[0] if result else {}
@@ -148,17 +163,14 @@ def fetch_partners_by_ids(conn: OdooConnection, partner_ids: list[int]) -> dict[
     """Fetch multiple partners at once. Returns {id: partner_dict}."""
     if not partner_ids:
         return {}
-    FIELDS = ["id", "vat", "name", "last_name", "first_name", "middle_name", "street", "city"]
-    results = _execute(conn, "res.partner", "read", [partner_ids], {"fields": FIELDS})
+    fields = ["id", "vat", "name", "last_name", "first_name", "middle_name", "street", "city"]
+    results = _execute(conn, "res.partner", "read", [partner_ids], {"fields": fields})
     return {r["id"]: r for r in results}
 
 
 def classify_purchase(conn: OdooConnection, account_id: int) -> str:
     """Map an account to SLSP purchase category based on account code prefix."""
-    result = _execute(
-        conn, "account.account", "read",
-        [[account_id]], {"fields": ["code"]}
-    )
+    result = _execute(conn, "account.account", "read", [[account_id]], {"fields": ["code"]})
     code = result[0].get("code") or "" if result else ""
     if code.startswith("1"):
         return "capital_goods"
@@ -188,8 +200,9 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
     Returns list of dicts: {"name", "url", "db", "user", "api_key"}
     Includes any task that has accounting database, email, and API key populated.
     """
-    FIELDS = [
-        "id", "project_id",
+    fields = [
+        "id",
+        "project_id",
         "x_studio_accounting_database",
         "x_studio_email",
         "x_studio_api_key",
@@ -199,7 +212,7 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
         ["x_studio_email", "!=", False],
         ["x_studio_api_key", "!=", False],
     ]
-    tasks = _execute(conn, "project.task", "search_read", [domain], {"fields": FIELDS})
+    tasks = _execute(conn, "project.task", "search_read", [domain], {"fields": fields})
     clients = []
     for task in tasks:
         db_val = (task.get("x_studio_accounting_database") or "").strip()

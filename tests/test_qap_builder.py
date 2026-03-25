@@ -1,11 +1,13 @@
 # tests/test_qap_builder.py
 import io
+
 import pytest
 from openpyxl import load_workbook
+
 from qap_builder import (
     build_qap_rows,
-    write_qap_xlsx,
     write_qap_dat,
+    write_qap_xlsx,
 )
 
 
@@ -77,8 +79,11 @@ _QAP_COMPANY = {
     "tin": "330593174",
     "raw_vat": "3305931740000",
     "registered_name": "PROSESO ACCOUNTING TEST",
-    "first_name": "", "middle_name": "", "last_name": "",
-    "street": "", "city": "",
+    "first_name": "",
+    "middle_name": "",
+    "last_name": "",
+    "street": "",
+    "city": "",
     "rdo": "050",
 }
 
@@ -106,12 +111,14 @@ class TestWriteQapDat:
     def test_c1_totals_match_rows(self, sample_bill_rows, sample_je_rows):
         merged = build_qap_rows(sample_bill_rows, sample_je_rows)
         dat = write_qap_dat(
-            merged, company=_QAP_COMPANY, period_end="2026-01-31",
+            merged,
+            company=_QAP_COMPANY,
+            period_end="2026-01-31",
         )
         lines = dat.strip().split("\r\n")
         c1 = lines[-1]
         assert "80000.00" in c1  # 50000 + 30000
-        assert "4000.00" in c1   # 1000 + 3000
+        assert "4000.00" in c1  # 1000 + 3000
 
     def test_no_hqap_without_company(self, sample_bill_rows):
         dat = write_qap_dat(sample_bill_rows)
@@ -123,7 +130,9 @@ class TestWriteQapDat:
 
     def test_period_overrides_row_dates(self, sample_bill_rows):
         dat = write_qap_dat(
-            sample_bill_rows, company=_QAP_COMPANY, period_end="2026-01-31",
+            sample_bill_rows,
+            company=_QAP_COMPANY,
+            period_end="2026-01-31",
         )
         assert "01/2026" in dat
         # Original date 2026-01-15 should not appear as-is

@@ -126,13 +126,22 @@ def sls_dat_header(company: dict, rows: list[dict], period: str) -> str:
     city = _q(clean_str(company.get("city", ""), 50))
     rdo = str(company.get("rdo", "")).strip()
     parts = [
-        "H", "S", tin,
-        name, first, middle, last, name, street, city,
+        "H",
+        "S",
+        tin,
+        name,
+        first,
+        middle,
+        last,
+        name,
+        street,
+        city,
         _n(sum(r.get("exempt_amount", 0) for r in rows)),
         _n(sum(r.get("zero_rated_amount", 0) for r in rows)),
         _n(sum(r.get("taxable_amount", 0) for r in rows)),
         _n(sum(r.get("tax_amount", 0) for r in rows)),
-        rdo, period,
+        rdo,
+        period,
     ]
     return ",".join(parts)
 
@@ -156,15 +165,26 @@ def slp_dat_header(company: dict, rows: list[dict], period: str) -> str:
     rdo = str(company.get("rdo", "")).strip()
     t_vat = _n(sum(r.get("input_tax", 0) for r in rows))
     parts = [
-        "H", "P", tin,
-        name, first, middle, last, name, street, city,
+        "H",
+        "P",
+        tin,
+        name,
+        first,
+        middle,
+        last,
+        name,
+        street,
+        city,
         _n(sum(r.get("exempt_amount", 0) for r in rows)),
         _n(sum(r.get("zero_rated_amount", 0) for r in rows)),
         _n(sum(r.get("services_amount", 0) for r in rows)),
         _n(sum(r.get("capital_goods_amount", 0) for r in rows)),
         _n(sum(r.get("other_goods_amount", 0) for r in rows)),
-        t_vat, t_vat, "0",
-        rdo, period,
+        t_vat,
+        t_vat,
+        "0",
+        rdo,
+        period,
     ]
     return ",".join(parts)
 
@@ -221,4 +241,3 @@ def qap_dat_line(row: dict, seq: int) -> str:
         _n(row.get("tax_withheld", 0)),
     ]
     return ",".join(parts)
-

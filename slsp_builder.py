@@ -11,29 +11,47 @@ from __future__ import annotations
 from typing import BinaryIO
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Alignment, Font, PatternFill
 
-from bir_format import slp_dat_line, sls_dat_line, slp_dat_header, sls_dat_header, fmt_date_slsp
+from bir_format import fmt_date_slsp, slp_dat_header, slp_dat_line, sls_dat_header, sls_dat_line
 
 SLP_COLUMNS = [
-    "TIN", "Registered Name", "Address",
-    "Exempt Amount", "Zero-Rated Amount",
-    "Services Amount", "Capital Goods Amount", "Other Goods Amount",
-    "Input Tax", "Source",
+    "TIN",
+    "Registered Name",
+    "Address",
+    "Exempt Amount",
+    "Zero-Rated Amount",
+    "Services Amount",
+    "Capital Goods Amount",
+    "Other Goods Amount",
+    "Input Tax",
+    "Source",
 ]
 
 SLS_COLUMNS = [
-    "TIN", "Registered Name", "Address",
-    "Exempt Amount", "Zero-Rated Amount",
-    "Taxable Amount", "Output Tax", "Source",
+    "TIN",
+    "Registered Name",
+    "Address",
+    "Exempt Amount",
+    "Zero-Rated Amount",
+    "Taxable Amount",
+    "Output Tax",
+    "Source",
 ]
 
 
-_AMOUNT_FIELDS = frozenset([
-    "exempt_amount", "zero_rated_amount",
-    "services_amount", "capital_goods_amount", "other_goods_amount", "input_tax",
-    "taxable_amount", "tax_amount",
-])
+_AMOUNT_FIELDS = frozenset(
+    [
+        "exempt_amount",
+        "zero_rated_amount",
+        "services_amount",
+        "capital_goods_amount",
+        "other_goods_amount",
+        "input_tax",
+        "taxable_amount",
+        "tax_amount",
+    ]
+)
 
 
 def aggregate_by_tin(rows: list[dict]) -> list[dict]:

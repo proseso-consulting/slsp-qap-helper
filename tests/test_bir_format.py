@@ -1,17 +1,15 @@
 # tests/test_bir_format.py
-import pytest
 from bir_format import (
-    clean_tin,
     clean_str,
-    clean_branch_code,
-    fmt_date_slsp,
+    clean_tin,
     fmt_date_qap,
+    fmt_date_slsp,
+    qap_dat_control,
+    qap_dat_header,
+    qap_dat_line,
+    slp_dat_header,
     slp_dat_line,
     sls_dat_header,
-    slp_dat_header,
-    qap_dat_line,
-    qap_dat_header,
-    qap_dat_control,
 )
 
 
@@ -58,7 +56,10 @@ class TestCleanStr:
         assert clean_str("test\u2018s\u2019") == "TESTS"
 
     def test_bir_realistic_name(self):
-        assert clean_str("Air Liquide Pipeline Utilities Services (APLUS), Inc.", max_len=60) == "AIR LIQUIDE PIPELINE UTILITIES SERVICES (APLUS) INC"
+        assert (
+            clean_str("Air Liquide Pipeline Utilities Services (APLUS), Inc.", max_len=60)
+            == "AIR LIQUIDE PIPELINE UTILITIES SERVICES (APLUS) INC"
+        )
 
     def test_collapses_whitespace(self):
         assert clean_str("a   b  c") == "A B C"
@@ -123,14 +124,19 @@ _SAMPLE_COMPANY = {
 }
 
 _SAMPLE_SLS_ROW = {
-    "exempt_amount": 0, "zero_rated_amount": 0,
-    "taxable_amount": 50000.00, "tax_amount": 6000.00,
+    "exempt_amount": 0,
+    "zero_rated_amount": 0,
+    "taxable_amount": 50000.00,
+    "tax_amount": 6000.00,
 }
 
 _SAMPLE_SLP_ROW = {
-    "exempt_amount": 0, "zero_rated_amount": 0,
-    "services_amount": 30000.00, "capital_goods_amount": 0,
-    "other_goods_amount": 0, "input_tax": 3600.00,
+    "exempt_amount": 0,
+    "zero_rated_amount": 0,
+    "services_amount": 30000.00,
+    "capital_goods_amount": 0,
+    "other_goods_amount": 0,
+    "input_tax": 3600.00,
 }
 
 
@@ -146,8 +152,8 @@ class TestSlsDatHeader:
     def test_totals_summed_from_rows(self):
         rows = [_SAMPLE_SLS_ROW, {**_SAMPLE_SLS_ROW, "taxable_amount": 10000.00, "tax_amount": 1200.00}]
         line = sls_dat_header(_SAMPLE_COMPANY, rows, "11/30/2025")
-        assert "60000.00" in line   # 50000 + 10000
-        assert "7200.00" in line    # 6000 + 1200
+        assert "60000.00" in line  # 50000 + 10000
+        assert "7200.00" in line  # 6000 + 1200
 
     def test_rdo_and_period_at_end(self):
         line = sls_dat_header(_SAMPLE_COMPANY, [_SAMPLE_SLS_ROW], "11/30/2025")
@@ -169,8 +175,8 @@ class TestSlpDatHeader:
         fields = line.split(",")
         assert fields[-5] == "3600.00"  # vat
         assert fields[-4] == "3600.00"  # vat duplicate
-        assert fields[-3] == "0"        # importation placeholder
-        assert fields[-2] == "050"      # rdo
+        assert fields[-3] == "0"  # importation placeholder
+        assert fields[-2] == "050"  # rdo
         assert fields[-1] == "11/30/2025"
 
 

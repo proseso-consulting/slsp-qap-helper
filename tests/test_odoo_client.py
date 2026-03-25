@@ -1,13 +1,15 @@
 # tests/test_odoo_client.py
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from odoo_client import (
     OdooConnection,
-    fetch_posted_bills,
-    fetch_journal_entries_with_wht,
-    fetch_partner_details,
     classify_purchase,
     fetch_companies,
+    fetch_journal_entries_with_wht,
+    fetch_partner_details,
+    fetch_posted_bills,
 )
 
 
@@ -135,21 +137,15 @@ class TestFetchPartnerDetails:
 
 class TestClassifyPurchase:
     def test_asset_account_returns_capital_goods(self, mock_conn):
-        mock_conn.models.execute_kw.return_value = [
-            {"id": 100, "code": "15100", "name": "Equipment"}
-        ]
+        mock_conn.models.execute_kw.return_value = [{"id": 100, "code": "15100", "name": "Equipment"}]
         assert classify_purchase(mock_conn, account_id=100) == "capital_goods"
 
     def test_expense_account_returns_services(self, mock_conn):
-        mock_conn.models.execute_kw.return_value = [
-            {"id": 601, "code": "60100", "name": "Professional Fees"}
-        ]
+        mock_conn.models.execute_kw.return_value = [{"id": 601, "code": "60100", "name": "Professional Fees"}]
         assert classify_purchase(mock_conn, account_id=601) == "services"
 
     def test_other_account_returns_other(self, mock_conn):
-        mock_conn.models.execute_kw.return_value = [
-            {"id": 200, "code": "20100", "name": "Accounts Payable"}
-        ]
+        mock_conn.models.execute_kw.return_value = [{"id": 200, "code": "20100", "name": "Accounts Payable"}]
         assert classify_purchase(mock_conn, account_id=200) == "other_than_capital_goods"
 
 
