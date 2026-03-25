@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A React + Vite SPA that serves as an **interactive design document** — it compares 4 architectural approaches for augmenting Philippine BIR SLSP and QAP tax reports with journal entry data from Odoo Online (across multiple client databases). This is a documentation/prototyping tool, not a production app.
+A **SLSP and QAP tax report augmentation service** serving multiple client Odoo databases. Built as a Cloud Run service with a React + Vite frontend for configuration.
 
 ## Commands
 
