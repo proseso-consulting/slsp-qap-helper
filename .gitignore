@@ -11,3 +11,13 @@ node_modules/
 .vscode/
 .claude/
 .playwright-mcp/
+
+# Frontend prototype
+src/
+index.html
+mockup.html
+slsp-approaches.jsx
+vite.config.js
+package.json
+package-lock.json
+setup_menu.py
