@@ -137,9 +137,12 @@
       <span class="o-breadcrumb-sep">›</span>
       <span class="o-breadcrumb-item active">Enhanced BIR Reports</span>
     </div>
-    <div class="o-actions">
+    <div class="o-actions" id="actions-slsp">
       <button type="button" class="btn btn-primary" id="btnXlsx">Download XLSX</button>
       <button type="button" class="btn btn-secondary" id="btnDat">Download DAT</button>
+    </div>
+    <div class="o-actions" id="actions-ebirforms" style="display:none">
+      <button type="button" class="btn btn-primary" id="btnGenerate" onclick="doGenerate()">Generate</button>
     </div>
   </div>
 
@@ -262,9 +265,6 @@
             <label class="o-label">Period (Year)</label>
             <input type="number" id="ebirforms_annual_year" value="{{ default_period[:4] }}" min="2020" max="2030">
           </div>
-          <div style="margin-top: 16px;">
-            <button type="button" class="btn btn-primary" id="btnGenerate" onclick="doGenerate()">Generate</button>
-          </div>
           <div id="ebirforms_status" style="display:none; margin-top:16px;"></div>
         </div>
       </div>
@@ -372,7 +372,8 @@
       document.getElementById('tab-ebirforms').style.display = tab === 'ebirforms' ? '' : 'none';
       document.querySelectorAll('.o-tab').forEach(function(t) { t.classList.remove('active'); });
       document.querySelector('.o-tab[onclick*="' + tab + '"]').classList.add('active');
-      document.querySelector('.o-actions').style.display = tab === 'slsp' ? '' : 'none';
+      document.getElementById('actions-slsp').style.display = tab === 'slsp' ? '' : 'none';
+      document.getElementById('actions-ebirforms').style.display = tab === 'ebirforms' ? '' : 'none';
     }
 
     /* eBIRForms: load companies for selected DB */
