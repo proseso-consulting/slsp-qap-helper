@@ -21,5 +21,4 @@ vite.config.js
 package.json
 package-lock.json
 setup_menu.py
-requirements.lock
 docs/
