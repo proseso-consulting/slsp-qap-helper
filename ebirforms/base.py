@@ -67,7 +67,7 @@ def build_ebirforms_content(fields: dict[str, str]) -> str:
     """
     parts = ["<?xml version='1.0'?>"]
     for key, value in fields.items():
-        encoded_value = quote(str(value), safe=".,:-")
+        encoded_value = quote(str(value), safe=".,:-@")
         parts.append(f"            <div>{key}={encoded_value}{key}=</div>")
     parts.append("                        All Rights Reserved BIR 2012.")
     return "".join(parts)
