@@ -19,6 +19,10 @@ from ebirforms.generators.form_1601eq import AtcEntry as EqAtcEntry
 from ebirforms.generators.form_1601eq import Form1601EQData, Form1601EQGenerator
 from ebirforms.generators.form_1601fq import AtcEntry as FqAtcEntry
 from ebirforms.generators.form_1601fq import Form1601FQData, Form1601FQGenerator
+from ebirforms.generators.form_1603q import Form1603QData, Form1603QGenerator, FringeBenefitEntry
+from ebirforms.generators.form_1604e import Form1604EData, Form1604EGenerator
+from ebirforms.generators.form_1702ex import Form1702EXData, Form1702EXGenerator
+from ebirforms.generators.form_1702mx import Form1702MXData, Form1702MXGenerator
 from ebirforms.generators.form_1702q import (
     DEDUCTION_ITEMIZED,
     Form1702QData,
@@ -31,8 +35,10 @@ from ebirforms.generators.form_1702rt import DEDUCTION_ITEMIZED as RT_DEDUCTION_
 from ebirforms.generators.form_1702rt import Form1702RTData, Form1702RTGenerator
 from ebirforms.generators.form_1702rt import IncomeStatementData as RTIncomeStatement
 from ebirforms.generators.form_1702rt import TaxCreditsData as RTTaxCredits
+from ebirforms.generators.form_2000 import DstLineItem, Form2000Data, Form2000Generator
 from ebirforms.generators.form_2550m import Form2550MData, Form2550MGenerator
 from ebirforms.generators.form_2550q import Form2550QData, Form2550QGenerator
+from ebirforms.generators.form_2551q import Form2551QData, Form2551QGenerator, PercentageTaxRow
 
 
 def build_savefile_name(tin12: str, form_number: str, date_from: str, date_to: str) -> str:
@@ -188,7 +194,7 @@ def _build_2550q(taxpayer: TaxpayerInfo, raw_vat: dict, date_from: str, date_to:
     quarter_month = int(date_to[5:7])
     quarter = {3: 1, 6: 2, 9: 3, 12: 4}.get(quarter_month, 1)
 
-    _Z = Decimal(0)
+    zero = Decimal(0)
     data = Form2550QData(
         year=year,
         quarter=quarter,
@@ -196,40 +202,40 @@ def _build_2550q(taxpayer: TaxpayerInfo, raw_vat: dict, date_from: str, date_to:
         vatable_sales=vat.vatable_sales,
         zero_rated_sales=vat.zero_rated_sales,
         exempt_sales=vat.exempt_sales,
-        less_output_vat=_Z,
-        add_output_vat=_Z,
-        input_tax_carried=_Z,
-        input_tax_deferred=_Z,
-        transitional_input_tax=_Z,
-        presumptive_input_tax=_Z,
-        other_prior_input_tax=_Z,
+        less_output_vat=zero,
+        add_output_vat=zero,
+        input_tax_carried=zero,
+        input_tax_deferred=zero,
+        transitional_input_tax=zero,
+        presumptive_input_tax=zero,
+        other_prior_input_tax=zero,
         other_prior_input_tax_label="",
-        domestic_purchase=_Z,
-        domestic_input_tax=_Z,
+        domestic_purchase=zero,
+        domestic_input_tax=zero,
         services_purchase=vat.total_purchases,
         service_input_tax=vat.input_vat,
-        import_purchase=_Z,
-        import_input_tax=_Z,
-        other_purchase=_Z,
+        import_purchase=zero,
+        import_input_tax=zero,
+        other_purchase=zero,
         other_purchase_label="",
-        other_purchase_input_tax=_Z,
-        domestic_purchase_no_tax=_Z,
-        vat_exempt_imports=_Z,
-        import_capital_input_tax=_Z,
-        input_tax_attr=_Z,
-        vat_refund=_Z,
-        input_vat_unpaid=_Z,
-        other_deduction=_Z,
+        other_purchase_input_tax=zero,
+        domestic_purchase_no_tax=zero,
+        vat_exempt_imports=zero,
+        import_capital_input_tax=zero,
+        input_tax_attr=zero,
+        vat_refund=zero,
+        input_vat_unpaid=zero,
+        other_deduction=zero,
         other_deduction_label="",
-        add_input_vat=_Z,
-        creditable_vat=_Z,
-        adv_vat_payment=_Z,
-        vat_paid_return=_Z,
-        other_credits=_Z,
+        add_input_vat=zero,
+        creditable_vat=zero,
+        adv_vat_payment=zero,
+        vat_paid_return=zero,
+        other_credits=zero,
         other_credits_label="",
-        surcharge=_Z,
-        interest=_Z,
-        compromise=_Z,
+        surcharge=zero,
+        interest=zero,
+        compromise=zero,
         taxpayer_classification=3,
     )
     gen = Form2550QGenerator(taxpayer, data)
@@ -326,6 +332,144 @@ def _build_1702rt(taxpayer: TaxpayerInfo, raw_income: dict, date_from: str, date
     return build_ebirforms_content(gen.build_fields())
 
 
+def _build_1702ex(taxpayer: TaxpayerInfo, raw_income: dict, date_from: str, date_to: str) -> str:
+    """Build 1702-EX XML from income statement data."""
+    pnl = extract_income_statement(raw_income)
+    year = int(date_from[:4])
+
+    data = Form1702EXData(
+        year=year,
+        is_amended=False,
+        is_calendar_year=True,
+        gross_income=pnl.revenue - pnl.cost_of_sales + pnl.non_operating_income,
+        total_deductions=pnl.deductions,
+        net_income=pnl.net_taxable_income,
+        exemption_type="",
+    )
+    gen = Form1702EXGenerator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
+def _build_1702mx(taxpayer: TaxpayerInfo, raw_income: dict, date_from: str, date_to: str) -> str:
+    """Build 1702-MX XML from income statement data."""
+    pnl = extract_income_statement(raw_income)
+    year = int(date_from[:4])
+    tax_rate = Decimal("25.00")
+
+    data = Form1702MXData(
+        year=year,
+        is_amended=False,
+        is_calendar_year=True,
+        regular_gross_income=pnl.revenue - pnl.cost_of_sales + pnl.non_operating_income,
+        regular_deductions=pnl.deductions,
+        regular_net_taxable=pnl.net_taxable_income,
+        regular_tax_rate=tax_rate,
+        regular_tax_due=pnl.net_taxable_income * tax_rate / 100,
+        exempt_gross_income=Decimal(0),
+        exempt_deductions=Decimal(0),
+        exempt_net_income=Decimal(0),
+        prior_year_excess=Decimal(0),
+        quarterly_payments=Decimal(0),
+        creditable_wt=Decimal(0),
+        surcharge=Decimal(0),
+        interest=Decimal(0),
+        compromise=Decimal(0),
+    )
+    gen = Form1702MXGenerator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
+def _build_1603q(taxpayer: TaxpayerInfo, manual: dict, date_from: str, date_to: str) -> str:
+    """Build 1603-Q from manual fringe benefit entries."""
+    entries = tuple(
+        FringeBenefitEntry(
+            description=e["description"],
+            tax_base=Decimal(str(e["tax_base"])),
+            tax_withheld=Decimal(str(e["tax_withheld"])),
+        )
+        for e in manual.get("entries", [])
+    )
+    total = sum(e.tax_withheld for e in entries)
+
+    data = Form1603QData(
+        year=manual["year"],
+        quarter=manual["quarter"],
+        is_amended=False,
+        is_private=True,
+        schedule_entries=entries,
+        total_tax_withheld=total,
+        tax_remitted_previous=Decimal(0),
+        surcharge=Decimal(0),
+        interest=Decimal(0),
+        compromise=Decimal(0),
+    )
+    gen = Form1603QGenerator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
+def _build_2551q(taxpayer: TaxpayerInfo, manual: dict, date_from: str, date_to: str) -> str:
+    """Build 2551-Q from manual percentage tax rows."""
+    rows = tuple(
+        PercentageTaxRow(
+            atc_code=r["atc_code"],
+            atc_description=r["atc_description"],
+            tax_base=Decimal(str(r["tax_base"])),
+            tax_rate=Decimal(str(r["tax_rate"])),
+            tax_due=Decimal(str(r["tax_due"])),
+        )
+        for r in manual.get("rows", [])
+    )
+    data = Form2551QData(
+        year=manual["year"],
+        quarter=manual["quarter"],
+        is_calendar_year=True,
+        year_ended_month=12,
+        is_amended=False,
+        has_tax_treaty=False,
+        tax_rows=rows,
+        prior_year_excess=Decimal(0),
+        amended_credits=Decimal(0),
+        surcharge=Decimal(0),
+        interest=Decimal(0),
+        compromise=Decimal(0),
+    )
+    gen = Form2551QGenerator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
+def _build_2000(taxpayer: TaxpayerInfo, manual: dict, date_from: str, date_to: str) -> str:
+    """Build 2000 from manual DST line items."""
+    items = tuple(
+        DstLineItem(
+            atc_code=item["atc_code"],
+            tax_base=Decimal(str(item["tax_base"])),
+            tax_rate=item["tax_rate"],
+            tax_due=Decimal(str(item["tax_due"])),
+        )
+        for item in manual.get("line_items", [])
+    )
+    data = Form2000Data(
+        year=manual["year"],
+        month=manual["month"],
+        is_amended=False,
+        line_items=items,
+    )
+    gen = Form2000Generator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
+def _build_1604e(taxpayer: TaxpayerInfo, manual: dict, date_from: str, date_to: str) -> str:
+    """Build 1604-E from manual/aggregated remittance data."""
+    data = Form1604EData(
+        year=manual["year"],
+        is_amended=False,
+        is_private=True,
+        is_top_withholding_agent=manual.get("is_top_withholding_agent", False),
+    )
+    gen = Form1604EGenerator(taxpayer, data)
+    return build_ebirforms_content(gen.build_fields())
+
+
 # Map form numbers to builder functions
 _FORM_BUILDERS = {
     # EWT
@@ -340,6 +484,13 @@ _FORM_BUILDERS = {
     # Income Tax
     "1702Q": lambda tp, data, df, dt: _build_1702q(tp, data, df, dt),
     "1702RT": lambda tp, data, df, dt: _build_1702rt(tp, data, df, dt),
+    "1702EX": lambda tp, data, df, dt: _build_1702ex(tp, data, df, dt),
+    "1702MX": lambda tp, data, df, dt: _build_1702mx(tp, data, df, dt),
+    # Manual-input forms
+    "1603Q": lambda tp, data, df, dt: _build_1603q(tp, data, df, dt),
+    "2551Q": lambda tp, data, df, dt: _build_2551q(tp, data, df, dt),
+    "2000": lambda tp, data, df, dt: _build_2000(tp, data, df, dt),
+    "1604E": lambda tp, data, df, dt: _build_1604e(tp, data, df, dt),
 }
 
 

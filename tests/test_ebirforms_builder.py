@@ -109,3 +109,62 @@ class TestBuild1601FQ:
         content = build_form_xml("1601FQ", _TAXPAYER, fwt_lines, "2026-01-01", "2026-03-31")
         assert "<?xml version='1.0'?>" in content
         assert "frm1601FQ" in content
+
+
+class TestBuild1603Q:
+    def test_produces_xml_content(self):
+        manual_data = {
+            "year": 2026,
+            "quarter": 1,
+            "entries": [
+                {"description": "Housing benefit", "tax_base": 100_000.0, "tax_withheld": 53_846.15},
+            ],
+        }
+        content = build_form_xml("1603Q", _TAXPAYER, manual_data, "2026-01-01", "2026-03-31", data_type="manual")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content
+
+
+class TestBuild2551Q:
+    def test_produces_xml_content(self):
+        manual_data = {
+            "year": 2026,
+            "quarter": 1,
+            "rows": [
+                {
+                    "atc_code": "PT010",
+                    "atc_description": "Percentage tax",
+                    "tax_base": 500_000.0,
+                    "tax_rate": 3.0,
+                    "tax_due": 15_000.0,
+                },
+            ],
+        }
+        content = build_form_xml("2551Q", _TAXPAYER, manual_data, "2026-01-01", "2026-03-31", data_type="manual")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content
+
+
+class TestBuild2000:
+    def test_produces_xml_content(self):
+        manual_data = {
+            "year": 2026,
+            "month": 3,
+            "line_items": [
+                {"atc_code": "DS101", "tax_base": 1_000_000.0, "tax_rate": "P1.50 per P200", "tax_due": 7_500.0},
+            ],
+        }
+        content = build_form_xml("2000", _TAXPAYER, manual_data, "2026-03-01", "2026-03-31", data_type="manual")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content
+
+
+class TestBuild1604E:
+    def test_produces_xml_content(self):
+        manual_data = {
+            "year": 2026,
+            "is_top_withholding_agent": False,
+        }
+        content = build_form_xml("1604E", _TAXPAYER, manual_data, "2026-01-01", "2026-12-31", data_type="manual")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content

@@ -53,3 +53,29 @@ class TestBuild1702RT:
         }
         content = build_form_xml("1702RT", _TAXPAYER, income_data, "2026-01-01", "2026-12-31", data_type="income")
         assert "frm1702RT" in content
+
+
+class TestBuild1702EX:
+    def test_produces_xml_content(self):
+        income_data = {
+            "revenue": 500_000.0,
+            "cost_of_sales": 300_000.0,
+            "non_operating_income": 0.0,
+            "deductions": 100_000.0,
+        }
+        content = build_form_xml("1702EX", _TAXPAYER, income_data, "2026-01-01", "2026-12-31", data_type="income")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content
+
+
+class TestBuild1702MX:
+    def test_produces_xml_content(self):
+        income_data = {
+            "revenue": 1_000_000.0,
+            "cost_of_sales": 600_000.0,
+            "non_operating_income": 50_000.0,
+            "deductions": 200_000.0,
+        }
+        content = build_form_xml("1702MX", _TAXPAYER, income_data, "2026-01-01", "2026-12-31", data_type="income")
+        assert "<?xml version='1.0'?>" in content
+        assert "txtTIN1=330" in content
