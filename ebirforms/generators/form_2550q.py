@@ -465,6 +465,12 @@ class Form2550QGenerator(FormGenerator):
         fields[f"{p}:penalties"] = _fmt_money(d.penalties)
         fields[f"{p}:totalPayable"] = _fmt_money(d.total_payable)
 
+        # --- Schedule 1 (capital goods amortization) totals ---
+        fields[f"{p}:sched1TotalD"] = "0.00"
+        fields[f"{p}:sched1TotalE"] = "0.00"
+        fields[f"{p}:sched1TotalH"] = "0.00"
+        fields[f"{p}:sched1TotalI"] = "0.00"
+
         # --- Schedule 2 (input tax allocation) - leave blank ---
         fields[f"{p}:sched2InputTaxDirect"] = "0.00"
         fields[f"{p}:sched2VatExemptSale"] = _fmt_money(d.exempt_sales)
