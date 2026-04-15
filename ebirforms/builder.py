@@ -43,6 +43,9 @@ from ebirforms.generators.form_2551q import Form2551QData, Form2551QGenerator, P
 
 # Map our internal form keys to eBIRForms' versioned form identifiers
 _EBIRFORMS_FORM_ID = {
+    "1702Q": "1702Qv2018C",
+    "1702EX": "1702EXv2018C",
+    "1702MX": "1702MXv2018C",
     "2550Q": "2550Qv2024",
     "2551Q": "2551Qv2018",
 }
