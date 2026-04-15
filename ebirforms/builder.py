@@ -41,11 +41,19 @@ from ebirforms.generators.form_2550q import Form2550QData, Form2550QGenerator
 from ebirforms.generators.form_2551q import Form2551QData, Form2551QGenerator, PercentageTaxRow
 
 
+# Map our internal form keys to eBIRForms' versioned form identifiers
+_EBIRFORMS_FORM_ID = {
+    "2550Q": "2550Qv2024",
+    "2551Q": "2551Qv2018",
+}
+
+
 def build_savefile_name(tin12: str, form_number: str, date_from: str, date_to: str) -> str:
     """Build the eBIRForms savefile name: {TIN12}-{Form}-{MMYYYY}.xml"""
+    ebir_id = _EBIRFORMS_FORM_ID.get(form_number, form_number)
     month = date_to[5:7]
     year = date_to[:4]
-    return f"{tin12}-{form_number}-{month}{year}.xml"
+    return f"{tin12}-{ebir_id}-{month}{year}.xml"
 
 
 def _build_0619e(taxpayer: TaxpayerInfo, ewt_totals: list[EwtAtcTotal], date_from: str, date_to: str) -> str:
