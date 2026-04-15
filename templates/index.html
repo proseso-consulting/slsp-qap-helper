@@ -205,14 +205,28 @@
         <div class="o-sheet-body">
           <div class="o-field-group">
             <label class="o-label">Form</label>
-            <select id="ebirforms_form">
+            <select id="ebirforms_form" onchange="onFormChange()">
               <optgroup label="Monthly">
                 <option value="0619E">0619-E - Expanded WT Monthly</option>
                 <option value="0619F">0619-F - Final WT Monthly</option>
+                <option value="2550M">2550-M - Monthly VAT</option>
               </optgroup>
               <optgroup label="Quarterly">
                 <option value="1601EQ">1601-EQ - Expanded WT Quarterly</option>
                 <option value="1601FQ">1601-FQ - Final WT Quarterly</option>
+                <option value="2550Q">2550-Q - Quarterly VAT</option>
+                <option value="1702Q">1702-Q - Quarterly Income Tax</option>
+                <option value="2551Q">2551-Q - Percentage Tax</option>
+                <option value="1603Q">1603-Q - Fringe Benefits WT</option>
+              </optgroup>
+              <optgroup label="Annual">
+                <option value="1702RT">1702-RT - Annual ITR (Regular)</option>
+                <option value="1702EX">1702-EX - Annual ITR (Exempt)</option>
+                <option value="1702MX">1702-MX - Annual ITR (Mixed)</option>
+                <option value="1604E">1604-E - Annual Expanded WT</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="2000">2000 - Documentary Stamp Tax</option>
               </optgroup>
             </select>
           </div>
@@ -228,9 +242,25 @@
             <label class="o-label">Company</label>
             <select id="ebirforms_company"></select>
           </div>
-          <div class="o-field-group">
-            <label class="o-label">Period</label>
+          <div class="o-field-group" id="ebirforms_period_month_group">
+            <label class="o-label">Period (Month)</label>
             <input type="month" id="ebirforms_period" value="{{ default_period }}">
+          </div>
+          <div class="o-field-group" id="ebirforms_period_quarter_group" style="display:none">
+            <label class="o-label">Period (Quarter)</label>
+            <div class="o-row">
+              <select id="ebirforms_quarter">
+                <option value="1">Q1 (Jan-Mar)</option>
+                <option value="2">Q2 (Apr-Jun)</option>
+                <option value="3">Q3 (Jul-Sep)</option>
+                <option value="4">Q4 (Oct-Dec)</option>
+              </select>
+              <input type="number" id="ebirforms_year" value="{{ default_period[:4] }}" min="2020" max="2030" style="width:100px">
+            </div>
+          </div>
+          <div class="o-field-group" id="ebirforms_period_annual_group" style="display:none">
+            <label class="o-label">Period (Year)</label>
+            <input type="number" id="ebirforms_annual_year" value="{{ default_period[:4] }}" min="2020" max="2030">
           </div>
           <div style="margin-top: 16px;">
             <button type="button" class="btn btn-primary" id="btnGenerate" onclick="doGenerate()">Generate</button>
@@ -365,6 +395,50 @@
     }
     loadCompaniesEbir(document.getElementById('ebirforms_db').value);
 
+    /* eBIRForms: form period type mapping */
+    var MONTHLY_FORMS = ['0619E', '0619F', '2550M', '2000'];
+    var QUARTERLY_FORMS = ['1601EQ', '1601FQ', '2550Q', '1702Q', '2551Q', '1603Q'];
+    var ANNUAL_FORMS = ['1702RT', '1702EX', '1702MX', '1604E'];
+
+    function onFormChange() {
+      var form = document.getElementById('ebirforms_form').value;
+      var isMonthly = MONTHLY_FORMS.indexOf(form) !== -1;
+      var isQuarterly = QUARTERLY_FORMS.indexOf(form) !== -1;
+      var isAnnual = ANNUAL_FORMS.indexOf(form) !== -1;
+      document.getElementById('ebirforms_period_month_group').style.display = isMonthly ? '' : 'none';
+      document.getElementById('ebirforms_period_quarter_group').style.display = isQuarterly ? '' : 'none';
+      document.getElementById('ebirforms_period_annual_group').style.display = isAnnual ? '' : 'none';
+    }
+    onFormChange();
+
+    function getEbirPeriod() {
+      var form = document.getElementById('ebirforms_form').value;
+      if (QUARTERLY_FORMS.indexOf(form) !== -1) {
+        var q = parseInt(document.getElementById('ebirforms_quarter').value);
+        var y = parseInt(document.getElementById('ebirforms_year').value);
+        var startMonth = (q - 1) * 3 + 1;
+        var endMonth = q * 3;
+        var lastDay = new Date(y, endMonth, 0).getDate();
+        return {
+          dateFrom: y + '-' + String(startMonth).padStart(2, '0') + '-01',
+          dateTo: y + '-' + String(endMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
+        };
+      }
+      if (ANNUAL_FORMS.indexOf(form) !== -1) {
+        var y = parseInt(document.getElementById('ebirforms_annual_year').value);
+        return { dateFrom: y + '-01-01', dateTo: y + '-12-31' };
+      }
+      var period = document.getElementById('ebirforms_period').value;
+      if (!period) return null;
+      var parts = period.split('-');
+      var y = parseInt(parts[0]), m = parseInt(parts[1]);
+      var lastDay = new Date(y, m, 0).getDate();
+      return {
+        dateFrom: y + '-' + String(m).padStart(2, '0') + '-01',
+        dateTo: y + '-' + String(m).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
+      };
+    }
+
     /* eBIRForms: generate */
     async function doGenerate() {
       var btn = document.getElementById('btnGenerate');
@@ -374,26 +448,22 @@
       btn.disabled = true;
       statusEl.style.display = 'none';
 
-      var period = document.getElementById('ebirforms_period').value;
+      var period = getEbirPeriod();
       if (!period) { showStatus('error', 'Select a period'); resetBtn(); return; }
-      var parts = period.split('-');
-      var year = parseInt(parts[0]), month = parseInt(parts[1]);
-      var dateFrom = year + '-' + String(month).padStart(2, '0') + '-01';
-      var lastDay = new Date(year, month, 0).getDate();
-      var dateTo = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
 
       var formData = new FormData();
       formData.set('form_number', document.getElementById('ebirforms_form').value);
       formData.set('db_name', document.getElementById('ebirforms_db').value);
       formData.set('company_id', document.getElementById('ebirforms_company').value || '0');
-      formData.set('date_from', dateFrom);
-      formData.set('date_to', dateTo);
+      formData.set('date_from', period.dateFrom);
+      formData.set('date_to', period.dateTo);
 
       try {
         var resp = await fetch('./ebirforms/generate', { method: 'POST', body: formData });
         if (!resp.ok) {
-          var err = await resp.json();
-          throw new Error(err.detail || 'Generation failed');
+          var errBody = await resp.text();
+          try { errBody = JSON.parse(errBody).detail; } catch(e) {}
+          throw new Error(errBody || 'Generation failed');
         }
         var data = await resp.json();
 
@@ -413,7 +483,7 @@
           showStatus('info', 'Downloaded ' + data.savefile.name + ' and ' + data.profile.name + ' (local agent not running)');
         }
       } catch (err) {
-        showStatus('error', err.message);
+        showStatus('error', String(err.message || err));
       } finally {
         resetBtn();
       }
