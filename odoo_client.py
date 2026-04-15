@@ -268,7 +268,7 @@ def fetch_company_profile(conn: OdooConnection) -> dict:
 
 def fetch_companies(conn: OdooConnection) -> list[dict]:
     """Fetch all companies accessible to the authenticated user."""
-    fields = ["id", "name", "vat", "street", "city", "l10n_ph_rdo"]
+    fields = ["id", "name", "vat", "street", "city", "l10n_ph_rdo", "fiscalyear_last_month"]
     return _execute(conn, "res.company", "search_read", [[]], {"fields": fields})
 
 

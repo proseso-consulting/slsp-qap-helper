@@ -256,7 +256,10 @@ def index(token: str, request: Request, db: str = Query(default="")):
 
 @app.get("/{token}/companies")
 def companies_endpoint(token: str, db: str = Query(...)):
-    """AJAX endpoint — returns company list for the selected database."""
+    """AJAX endpoint — returns company list for the selected database.
+
+    Each company includes fiscalyear_last_month (1-12, default 12 = calendar year).
+    """
     err = _check_token(token)
     if err:
         return err
@@ -266,7 +269,11 @@ def companies_endpoint(token: str, db: str = Query(...)):
         return JSONResponse([], status_code=200)
     try:
         conn = connect(client["url"], client["db"], client["user"], client["api_key"])
-        return get_companies(conn)
+        companies = get_companies(conn)
+        # Enrich with fiscal year month (default 12 = calendar year Dec)
+        for c in companies:
+            c.setdefault("fiscalyear_last_month", 12)
+        return companies
     except Exception:
         log.warning("Failed to load companies for db=%s", db, exc_info=True)
         return JSONResponse([], status_code=200)
