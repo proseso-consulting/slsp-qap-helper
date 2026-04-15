@@ -463,7 +463,11 @@
         var resp = await fetch('./ebirforms/generate', { method: 'POST', body: formData });
         if (!resp.ok) {
           var errBody = await resp.text();
-          try { errBody = JSON.parse(errBody).detail; } catch(e) {}
+          try {
+            var parsed = JSON.parse(errBody);
+            var d = parsed.detail;
+            errBody = typeof d === 'string' ? d : Array.isArray(d) ? d.map(function(e) { return e.msg || JSON.stringify(e); }).join('; ') : JSON.stringify(d);
+          } catch(e) {}
           throw new Error(errBody || 'Generation failed');
         }
         var data = await resp.json();
