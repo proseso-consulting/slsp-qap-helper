@@ -117,6 +117,60 @@ def fetch_tax_details(conn: OdooConnection, tax_ids: list[int]) -> list[dict]:
     return _execute(conn, "account.tax", "read", [tax_ids], {"fields": fields})
 
 
+def fetch_tax_lines_by_atc(conn: OdooConnection, date_from: str, date_to: str) -> list[dict]:
+    """Fetch all posted AML tax lines that have a PH ATC code in the period.
+
+    Returns list of dicts with: atc_code, tax_rate, tax_name, tax_base, tax_amount.
+    """
+    amls = _execute(
+        conn,
+        "account.move.line",
+        "search_read",
+        [
+            [
+                ("move_id.state", "=", "posted"),
+                ("date", ">=", date_from),
+                ("date", "<=", date_to),
+                ("tax_line_id", "!=", False),
+            ],
+        ],
+        {"fields": ["tax_line_id", "tax_base_amount", "debit", "credit", "balance"]},
+    )
+
+    if not amls:
+        return []
+
+    tax_ids = list({aml["tax_line_id"][0] for aml in amls})
+    taxes = _execute(
+        conn,
+        "account.tax",
+        "read",
+        [tax_ids],
+        {
+            "fields": ["l10n_ph_atc", "amount", "name"],
+        },
+    )
+    tax_map = {t["id"]: t for t in taxes}
+
+    result = []
+    for aml in amls:
+        tax_id = aml["tax_line_id"][0]
+        tax = tax_map.get(tax_id, {})
+        atc = tax.get("l10n_ph_atc")
+        if not atc:
+            continue
+        result.append(
+            {
+                "atc_code": atc,
+                "tax_rate": abs(tax.get("amount", 0)),
+                "tax_name": tax.get("name", ""),
+                "tax_base": aml["tax_base_amount"],
+                "tax_amount": abs(aml["balance"]),
+            }
+        )
+    return result
+
+
 def fetch_journal_entries_with_wht(
     conn: OdooConnection,
     date_from: str,
@@ -179,6 +233,39 @@ def classify_purchase(conn: OdooConnection, account_id: int) -> str:
     return "other_than_capital_goods"
 
 
+def fetch_company_profile(conn: OdooConnection) -> dict:
+    """Fetch the company's BIR profile data for eBIRForms.
+
+    Returns dict with: name, vat, branch_code, l10n_ph_rdo, street, city, zip, phone, email.
+    """
+    companies = _execute(
+        conn,
+        "res.company",
+        "search_read",
+        [
+            [("id", "=", conn.company_id)] if conn.company_id else [],
+        ],
+        {
+            "fields": [
+                "name",
+                "vat",
+                "branch_code",
+                "l10n_ph_rdo",
+                "street",
+                "street2",
+                "city",
+                "zip",
+                "phone",
+                "email",
+            ],
+            "limit": 1,
+        },
+    )
+    if not companies:
+        raise ValueError("No company found")
+    return companies[0]
+
+
 def fetch_companies(conn: OdooConnection) -> list[dict]:
     """Fetch all companies accessible to the authenticated user."""
     fields = ["id", "name", "vat", "street", "city", "l10n_ph_rdo"]
@@ -206,6 +293,7 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
         "x_studio_accounting_database",
         "x_studio_email",
         "x_studio_api_key",
+        "x_studio_line_of_business",
     ]
     domain = [
         ["x_studio_accounting_database", "!=", False],
@@ -229,5 +317,6 @@ def fetch_client_tasks(conn: OdooConnection) -> list[dict]:
             url = f"https://{db}.odoo.com"
         name_val = task.get("project_id")
         name = name_val[1] if isinstance(name_val, list) and len(name_val) > 1 else db
-        clients.append({"name": name, "url": url, "db": db, "user": email, "api_key": api_key})
+        lob = (task.get("x_studio_line_of_business") or "").strip()
+        clients.append({"name": name, "url": url, "db": db, "user": email, "api_key": api_key, "line_of_business": lob})
     return clients

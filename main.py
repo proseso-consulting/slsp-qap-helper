@@ -23,7 +23,7 @@ from datetime import date as date_type
 from itertools import groupby
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -34,11 +34,13 @@ from odoo_client import (
     connect,
     fetch_bill_lines_with_tax,
     fetch_client_tasks,
+    fetch_company_profile,
     fetch_journal_entries_with_wht,
     fetch_partner_details,
     fetch_partners_by_ids,
     fetch_posted_bills,
     fetch_tax_details,
+    fetch_tax_lines_by_atc,
     get_companies,
     get_semaphore,
 )
@@ -113,6 +115,19 @@ def _default_quarter_dates() -> tuple[str, str]:
     return str(q_start), str(q_end)
 
 
+def _line_gross(line: dict) -> float:
+    """Return the base (pre-tax) amount for a move line.
+
+    Bills populate ``price_subtotal``; journal-entry lines leave it at 0 and
+    use ``debit``/``credit`` instead.  Fall back to the latter when the former
+    is missing or zero.
+    """
+    subtotal = line.get("price_subtotal", 0)
+    if subtotal:
+        return abs(subtotal)
+    return abs(line.get("debit", 0) - line.get("credit", 0))
+
+
 def _extract_slsp_rows(conn, moves, report_type, source_label, partners_cache=None):
     """Convert fetched moves (bills or JEs) into cleaned SLSP rows."""
     rows = []
@@ -137,7 +152,7 @@ def _extract_slsp_rows(conn, moves, report_type, source_label, partners_cache=No
                 # Skip EWT/FWT taxes — they have ATC codes and belong in QAP, not SLSP
                 if tax.get("l10n_ph_atc"):
                     continue
-                gross = abs(line.get("price_subtotal", 0))
+                gross = _line_gross(line)
                 tax_amt = round(gross * abs(tax.get("amount", 0)) / 100, 2)
                 account_id_val = line.get("account_id")
                 if report_type == "purchases":
@@ -201,7 +216,7 @@ def _extract_qap_rows(conn, moves, source_label, partners_cache=None):
                 atc = tax.get("l10n_ph_atc")
                 if not atc or tax.get("type_tax_use") != "purchase":
                     continue
-                gross = abs(line.get("price_subtotal", 0))
+                gross = _line_gross(line)
                 rows.append(
                     {
                         "tin": clean_tin(partner.get("vat", "")),
@@ -439,6 +454,91 @@ def export_report(
         except Exception:
             log.exception("Export failed for db=%s report=%s", db_name, report_type)
             return JSONResponse({"detail": "Export failed — check server logs"}, status_code=500)
+
+
+@app.post("/{token}/ebirforms/generate")
+def ebirforms_generate(
+    token: str,
+    form_number: str = Form(...),
+    db_name: str = Form(...),
+    company_id: int = Form(0),
+    date_from: str = Form(...),
+    date_to: str = Form(...),
+):
+    """Generate an eBIRForms XML file for a specific form and client."""
+    err = _check_token(token)
+    if err:
+        return err
+
+    from ebirforms.base import TaxpayerInfo
+    from ebirforms.builder import build_form_xml, build_savefile_name
+    from ebirforms.profile import build_profile_content, profile_filename
+
+    clients = _load_clients()
+    client = next((c for c in clients if c["db"] == db_name), None)
+    if not client:
+        raise HTTPException(404, f"Client database not found: {db_name}")
+
+    conn = connect(client["url"], client["db"], client["user"], client["api_key"], company_id=company_id or None)
+
+    company = fetch_company_profile(conn)
+    vat = company.get("vat") or ""
+    branch = company.get("branch_code") or "000"
+    tin_raw = vat.replace("-", "").replace(" ", "")
+    tin12 = f"{tin_raw}{branch}".ljust(12, "0")[:12]
+    tin_formatted = f"{tin_raw[:3]}-{tin_raw[3:6]}-{tin_raw[6:9]}-{branch}"
+
+    lob = client.get("line_of_business", "")
+    taxpayer = TaxpayerInfo(
+        tin=tin_formatted,
+        rdo_code=company.get("l10n_ph_rdo") or "",
+        name=company.get("name", ""),
+        trade_name=company.get("name", ""),
+        address=_build_address(company),
+        zip_code=company.get("zip") or "",
+        telephone=company.get("phone") or "",
+        email=company.get("email") or "",
+        line_of_business=lob,
+    )
+
+    with get_semaphore(db_name):
+        raw_lines = fetch_tax_lines_by_atc(conn, date_from, date_to)
+
+    xml_content = build_form_xml(form_number, taxpayer, raw_lines, date_from, date_to)
+    profile_content = build_profile_content(taxpayer)
+
+    savefile_name = build_savefile_name(tin12, form_number, date_from, date_to)
+    prof_name = profile_filename(taxpayer)
+
+    return JSONResponse(
+        {
+            "savefile": {
+                "name": savefile_name,
+                "content": xml_content,
+                "path": f"C:\\eBIRForms\\savefile\\{savefile_name}",
+            },
+            "profile": {"name": prof_name, "content": profile_content, "path": f"C:\\eBIRForms\\profile\\{prof_name}"},
+            "warnings": _collect_warnings(company, taxpayer),
+        }
+    )
+
+
+def _build_address(company: dict) -> str:
+    """Build address string from Odoo company fields."""
+    parts = [company.get("street") or "", company.get("street2") or "", company.get("city") or ""]
+    return " ".join(p for p in parts if p).strip()
+
+
+def _collect_warnings(company: dict, taxpayer) -> list[str]:
+    """Collect data quality warnings."""
+    warnings = []
+    if not company.get("vat"):
+        warnings.append("TIN not set in client Odoo. Set it in Settings > Companies.")
+    if not company.get("l10n_ph_rdo"):
+        warnings.append("RDO code not set. Set l10n_ph_rdo in Settings > Companies.")
+    if not taxpayer.line_of_business:
+        warnings.append("Line of business not set. Set x_studio_line_of_business in proseso-ventures.")
+    return warnings
 
 
 if __name__ == "__main__":

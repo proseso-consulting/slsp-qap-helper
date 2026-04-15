@@ -95,6 +95,27 @@
     }
     .result.show { display: block; }
     .result.error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+
+    /* Tab switcher */
+    .o-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid #dee2e6;
+      padding: 0 24px; background: white;
+    }
+    .o-tab {
+      padding: 10px 20px; font-size: 13px; font-weight: 500;
+      color: #6c757d; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: all 0.15s; background: none; border-top: none;
+      border-left: none; border-right: none; font-family: inherit;
+    }
+    .o-tab:hover { color: #212529; }
+    .o-tab.active { color: #714B67; border-bottom-color: #714B67; }
+
+    /* eBIRForms status */
+    .ebir-status { padding: 10px 16px; border-radius: 4px; font-size: 13px; margin: 12px 0 0; }
+    .ebir-status.success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+    .ebir-status.warning { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; }
+    .ebir-status.error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+    .ebir-status.info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
   </style>
 </head>
 <body>
@@ -122,48 +143,103 @@
     </div>
   </div>
 
+  <!-- Tab switcher -->
+  <div class="o-tabs">
+    <button class="o-tab active" onclick="switchTab('slsp')">SLSP / QAP</button>
+    <button class="o-tab" onclick="switchTab('ebirforms')">eBIRForms</button>
+  </div>
+
   <!-- Page body -->
   <div class="o-content">
-    <div class="o-sheet">
-      <div class="o-sheet-header">
-        <div class="o-sheet-title">Enhanced BIR Reports</div>
-        <div class="o-sheet-subtitle">SLSP and QAP exports that include journal entries alongside vendor bills</div>
+
+    <!-- Tab 1: SLSP / QAP -->
+    <div id="tab-slsp">
+      <div class="o-sheet">
+        <div class="o-sheet-header">
+          <div class="o-sheet-title">Enhanced BIR Reports</div>
+          <div class="o-sheet-subtitle">SLSP and QAP exports that include journal entries alongside vendor bills</div>
+        </div>
+        <div class="o-sheet-body">
+          <form id="exportForm">
+            <div class="o-field-group">
+              <label class="o-label">Report</label>
+              <select name="report_type">
+                <option value="slsp_purchases">SLSP — Purchases (SLP)</option>
+                <option value="slsp_sales">SLSP — Sales (SLS)</option>
+                <option value="qap">QAP — Quarterly Alphalist of Payees</option>
+              </select>
+            </div>
+            <div class="o-field-group" id="dbGroup" {% if locked_db %}style="display:none"{% endif %}>
+              <label class="o-label">Database</label>
+              <select name="db_name" id="dbSelect">
+                {% for client in clients %}
+                <option value="{{ client.db }}" {% if client.db == locked_db %}selected{% endif %}>{{ client.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="o-field-group" id="companyGroup">
+              <label class="o-label">Company</label>
+              <select name="company_id" id="companySelect">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+            <div class="o-field-group">
+              <label class="o-label">Period</label>
+              <input type="month" name="period" value="{{ default_period }}">
+            </div>
+            <input type="hidden" name="date_from" id="hiddenDateFrom">
+            <input type="hidden" name="date_to" id="hiddenDateTo">
+          </form>
+          <div id="result" class="result"></div>
+        </div>
       </div>
-      <div class="o-sheet-body">
-        <form id="exportForm">
+    </div>
+
+    <!-- Tab 2: eBIRForms -->
+    <div id="tab-ebirforms" style="display:none">
+      <div class="o-sheet">
+        <div class="o-sheet-header">
+          <div class="o-sheet-title">eBIRForms Generator</div>
+          <div class="o-sheet-subtitle">Generate eBIRForms XML files from Odoo tax data</div>
+        </div>
+        <div class="o-sheet-body">
           <div class="o-field-group">
-            <label class="o-label">Report</label>
-            <select name="report_type">
-              <option value="slsp_purchases">SLSP — Purchases (SLP)</option>
-              <option value="slsp_sales">SLSP — Sales (SLS)</option>
-              <option value="qap">QAP — Quarterly Alphalist of Payees</option>
+            <label class="o-label">Form</label>
+            <select id="ebirforms_form">
+              <optgroup label="Monthly">
+                <option value="0619E">0619-E - Expanded WT Monthly</option>
+                <option value="0619F">0619-F - Final WT Monthly</option>
+              </optgroup>
+              <optgroup label="Quarterly">
+                <option value="1601EQ">1601-EQ - Expanded WT Quarterly</option>
+                <option value="1601FQ">1601-FQ - Final WT Quarterly</option>
+              </optgroup>
             </select>
           </div>
-          <div class="o-field-group" id="dbGroup" {% if locked_db %}style="display:none"{% endif %}>
-            <label class="o-label">Database</label>
-            <select name="db_name" id="dbSelect">
+          <div class="o-field-group" id="ebirDbGroup" {% if locked_db %}style="display:none"{% endif %}>
+            <label class="o-label">Client</label>
+            <select id="ebirforms_db" onchange="loadCompaniesEbir(this.value)">
               {% for client in clients %}
               <option value="{{ client.db }}" {% if client.db == locked_db %}selected{% endif %}>{{ client.name }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="o-field-group" id="companyGroup">
+          <div class="o-field-group" id="ebirforms_company_group" style="display:none">
             <label class="o-label">Company</label>
-            <select name="company_id" id="companySelect">
-              <option value="">Loading...</option>
-            </select>
+            <select id="ebirforms_company"></select>
           </div>
           <div class="o-field-group">
             <label class="o-label">Period</label>
-            <input type="month" name="period" value="{{ default_period }}">
+            <input type="month" id="ebirforms_period" value="{{ default_period }}">
           </div>
-          <!-- hidden fields computed from period by JS -->
-          <input type="hidden" name="date_from" id="hiddenDateFrom">
-          <input type="hidden" name="date_to" id="hiddenDateTo">
-        </form>
-        <div id="result" class="result"></div>
+          <div style="margin-top: 16px;">
+            <button type="button" class="btn btn-primary" id="btnGenerate" onclick="doGenerate()">Generate</button>
+          </div>
+          <div id="ebirforms_status" style="display:none; margin-top:16px;"></div>
+        </div>
       </div>
     </div>
+
   </div>
   <script>
     function clearSelect(sel) {
@@ -259,6 +335,123 @@
 
     document.getElementById('btnXlsx').addEventListener('click', function() { doExport('xlsx'); });
     document.getElementById('btnDat').addEventListener('click', function() { doExport('dat'); });
+
+    /* Tab switching */
+    function switchTab(tab) {
+      document.getElementById('tab-slsp').style.display = tab === 'slsp' ? '' : 'none';
+      document.getElementById('tab-ebirforms').style.display = tab === 'ebirforms' ? '' : 'none';
+      document.querySelectorAll('.o-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelector('.o-tab[onclick*="' + tab + '"]').classList.add('active');
+      document.querySelector('.o-actions').style.display = tab === 'slsp' ? '' : 'none';
+    }
+
+    /* eBIRForms: load companies for selected DB */
+    async function loadCompaniesEbir(db) {
+      var sel = document.getElementById('ebirforms_company');
+      clearSelect(sel);
+      addOption(sel, '', 'Loading...');
+      try {
+        var resp = await fetch('./companies?db=' + encodeURIComponent(db));
+        var companies = await resp.json();
+        clearSelect(sel);
+        companies.forEach(function(c) {
+          addOption(sel, c.id, c.name + (c.vat ? ' (' + c.vat + ')' : ''));
+        });
+        document.getElementById('ebirforms_company_group').style.display = companies.length <= 1 ? 'none' : '';
+      } catch (err) {
+        clearSelect(sel);
+        addOption(sel, '', 'Failed to load');
+      }
+    }
+    loadCompaniesEbir(document.getElementById('ebirforms_db').value);
+
+    /* eBIRForms: generate */
+    async function doGenerate() {
+      var btn = document.getElementById('btnGenerate');
+      var statusEl = document.getElementById('ebirforms_status');
+      btn.textContent = 'Generating...';
+      btn.classList.add('btn-loading');
+      btn.disabled = true;
+      statusEl.style.display = 'none';
+
+      var period = document.getElementById('ebirforms_period').value;
+      if (!period) { showStatus('error', 'Select a period'); resetBtn(); return; }
+      var parts = period.split('-');
+      var year = parseInt(parts[0]), month = parseInt(parts[1]);
+      var dateFrom = year + '-' + String(month).padStart(2, '0') + '-01';
+      var lastDay = new Date(year, month, 0).getDate();
+      var dateTo = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+
+      var formData = new FormData();
+      formData.set('form_number', document.getElementById('ebirforms_form').value);
+      formData.set('db_name', document.getElementById('ebirforms_db').value);
+      formData.set('company_id', document.getElementById('ebirforms_company').value || '0');
+      formData.set('date_from', dateFrom);
+      formData.set('date_to', dateTo);
+
+      try {
+        var resp = await fetch('./ebirforms/generate', { method: 'POST', body: formData });
+        if (!resp.ok) {
+          var err = await resp.json();
+          throw new Error(err.detail || 'Generation failed');
+        }
+        var data = await resp.json();
+
+        if (data.warnings && data.warnings.length > 0) {
+          showStatus('warning', 'Warnings: ' + data.warnings.join('; '));
+        }
+
+        var agentOk = false;
+        try {
+          await sendToAgent(data.savefile);
+          await sendToAgent(data.profile);
+          agentOk = true;
+          showStatus('success', 'Saved: ' + data.savefile.path + ' and ' + data.profile.path);
+        } catch (e) {
+          downloadFile(data.savefile.name, data.savefile.content);
+          downloadFile(data.profile.name, data.profile.content);
+          showStatus('info', 'Downloaded ' + data.savefile.name + ' and ' + data.profile.name + ' (local agent not running)');
+        }
+      } catch (err) {
+        showStatus('error', err.message);
+      } finally {
+        resetBtn();
+      }
+    }
+
+    function resetBtn() {
+      var btn = document.getElementById('btnGenerate');
+      btn.textContent = 'Generate';
+      btn.classList.remove('btn-loading');
+      btn.disabled = false;
+    }
+
+    async function sendToAgent(file) {
+      var resp = await fetch('http://localhost:5123/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: file.path, content: file.content }),
+      });
+      if (!resp.ok) throw new Error('Agent error');
+    }
+
+    function downloadFile(name, content) {
+      var blob = new Blob([content], { type: 'application/xml' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+
+    function showStatus(type, msg) {
+      var el = document.getElementById('ebirforms_status');
+      el.className = 'ebir-status ' + type;
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
   </script>
 </body>
 </html>
