@@ -1,14 +1,7 @@
 # cloudbuild.yaml
 # Triggered by push to master branch.
 # Builds Docker image, deploys to Cloud Run in asia-southeast1.
-#
-# CANARY DEPLOYMENT:
-#   --no-traffic  → new revision is created but receives 0% traffic
-#   --tag canary  → creates a preview URL: canary---slsp-qap-helper-<hash>.a.run.app
-#
-# To promote after testing:
-#   gcloud run services update-traffic slsp-qap-helper --to-latest --region asia-southeast1
-#   (or run ./promote.sh)
+# New revision gets 100% traffic immediately.
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -36,8 +29,6 @@ steps:
       - '--timeout=300'
       - '--memory=1Gi'
       - '--concurrency=15'
-      - '--no-traffic'
-      - '--tag=canary'
       - '--set-secrets=SOURCE_BASE_URL=slsp-qap-source-url:latest,SOURCE_DB=slsp-qap-source-db:latest,SOURCE_LOGIN=slsp-qap-source-login:latest,SOURCE_PASSWORD=slsp-qap-source-password:latest,ACCESS_TOKEN=slsp-qap-access-token:latest'
 
 images:
