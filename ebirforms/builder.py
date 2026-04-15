@@ -74,8 +74,20 @@ def _build_0619e(taxpayer: TaxpayerInfo, ewt_totals: list[EwtAtcTotal], date_fro
     return build_ebirforms_content(gen.build_fields())
 
 
-def _build_1601eq(taxpayer: TaxpayerInfo, ewt_totals: list[EwtAtcTotal], date_from: str, date_to: str) -> str:
-    """Build 1601-EQ XML from EWT totals."""
+def _build_1601eq(
+    taxpayer: TaxpayerInfo,
+    ewt_totals: list[EwtAtcTotal],
+    date_from: str,
+    date_to: str,
+    *,
+    month1_total: Decimal = Decimal(0),
+    month2_total: Decimal = Decimal(0),
+) -> str:
+    """Build 1601-EQ XML from EWT totals.
+
+    month1_total/month2_total are the 0619-E remittances for the first
+    two months of the quarter (auto-computed from monthly EWT data).
+    """
     year = int(date_from[:4])
     quarter_month = int(date_to[5:7])
     quarter = {3: 1, 6: 2, 9: 3, 12: 4}.get(quarter_month, 1)
@@ -88,8 +100,8 @@ def _build_1601eq(taxpayer: TaxpayerInfo, ewt_totals: list[EwtAtcTotal], date_fr
         is_amended=False,
         is_private=True,
         atc_entries=entries,
-        remittance_month1=Decimal(0),
-        remittance_month2=Decimal(0),
+        remittance_month1=month1_total,
+        remittance_month2=month2_total,
         previously_remitted_amended=Decimal(0),
         over_remittance_prior_quarter=Decimal(0),
         surcharge=Decimal(0),
@@ -130,7 +142,15 @@ def _build_0619f(taxpayer: TaxpayerInfo, fwt_totals: list[EwtAtcTotal], date_fro
     return build_ebirforms_content(gen.build_fields())
 
 
-def _build_1601fq(taxpayer: TaxpayerInfo, fwt_totals: list[EwtAtcTotal], date_from: str, date_to: str) -> str:
+def _build_1601fq(
+    taxpayer: TaxpayerInfo,
+    fwt_totals: list[EwtAtcTotal],
+    date_from: str,
+    date_to: str,
+    *,
+    month1_total: Decimal = Decimal(0),
+    month2_total: Decimal = Decimal(0),
+) -> str:
     """Build 1601-FQ XML from FWT totals."""
     year = int(date_from[:4])
     quarter_month = int(date_to[5:7])
@@ -155,7 +175,7 @@ def _build_1601fq(taxpayer: TaxpayerInfo, fwt_totals: list[EwtAtcTotal], date_fr
         atc_entries=entries,
         total_tax_withheld=total,
         tax_remitted_previous=Decimal(0),
-        total_credits=Decimal(0),
+        total_credits=month1_total + month2_total,
         surcharge=Decimal(0),
         interest=Decimal(0),
         compromise=Decimal(0),
@@ -502,6 +522,7 @@ def build_form_xml(
     date_to: str,
     *,
     data_type: str = "ewt",
+    monthly_raw: list[list[dict]] | None = None,
 ) -> str:
     """Build eBIRForms XML content for a given form.
 
@@ -512,10 +533,26 @@ def build_form_xml(
         date_from: Period start (YYYY-MM-DD)
         date_to: Period end (YYYY-MM-DD)
         data_type: "ewt" for withholding tax forms, "vat" for VAT forms
+        monthly_raw: For quarterly EWT forms, list of 3 monthly raw line lists
+            [month1_lines, month2_lines, month3_lines] used to compute
+            0619-E/F remittance amounts for items 20-21.
 
     Returns:
         eBIRForms pseudo-XML string ready to write to file.
     """
+    # Quarterly EWT/FWT forms with monthly data: compute remittances
+    if form_number == "1601EQ" and monthly_raw and len(monthly_raw) == 3:
+        ewt_totals = extract_ewt_summary(raw_data, category="expanded")
+        m1 = sum(t.tax_withheld for t in extract_ewt_summary(monthly_raw[0], category="expanded"))
+        m2 = sum(t.tax_withheld for t in extract_ewt_summary(monthly_raw[1], category="expanded"))
+        return _build_1601eq(taxpayer, ewt_totals, date_from, date_to, month1_total=m1, month2_total=m2)
+
+    if form_number == "1601FQ" and monthly_raw and len(monthly_raw) == 3:
+        fwt_totals = extract_ewt_summary(raw_data, category="final")
+        m1 = sum(t.tax_withheld for t in extract_ewt_summary(monthly_raw[0], category="final"))
+        m2 = sum(t.tax_withheld for t in extract_ewt_summary(monthly_raw[1], category="final"))
+        return _build_1601fq(taxpayer, fwt_totals, date_from, date_to, month1_total=m1, month2_total=m2)
+
     builder = _FORM_BUILDERS.get(form_number)
     if builder is None:
         raise ValueError(f"No builder for form {form_number}. Available: {sorted(_FORM_BUILDERS.keys())}")
