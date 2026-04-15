@@ -171,6 +171,117 @@ def fetch_tax_lines_by_atc(conn: OdooConnection, date_from: str, date_to: str) -
     return result
 
 
+def fetch_vat_summary(conn: OdooConnection, date_from: str, date_to: str) -> dict:
+    """Fetch VAT summary from posted journal entries in the period.
+
+    Returns dict with output_vat, vatable_sales, input_vat, total_purchases, etc.
+    """
+    from decimal import Decimal
+
+    amls = _execute(
+        conn,
+        "account.move.line",
+        "search_read",
+        [
+            [
+                ("move_id.state", "=", "posted"),
+                ("date", ">=", date_from),
+                ("date", "<=", date_to),
+                ("tax_line_id", "!=", False),
+            ],
+        ],
+        {"fields": ["tax_line_id", "tax_base_amount", "debit", "credit", "balance"]},
+    )
+
+    if not amls:
+        return {
+            "output_vat": Decimal(0), "vatable_sales": Decimal(0),
+            "zero_rated_sales": Decimal(0), "exempt_sales": Decimal(0),
+            "input_vat": Decimal(0), "total_purchases": Decimal(0),
+            "sales_to_govt": Decimal(0),
+        }
+
+    tax_ids = list({aml["tax_line_id"][0] for aml in amls})
+    taxes = _execute(conn, "account.tax", "read", [tax_ids], {
+        "fields": ["name", "amount", "type_tax_use", "l10n_ph_atc"],
+    })
+    tax_map = {t["id"]: t for t in taxes}
+
+    output_vat = Decimal(0)
+    vatable_sales = Decimal(0)
+    input_vat = Decimal(0)
+    total_purchases = Decimal(0)
+
+    for aml in amls:
+        tax_id = aml["tax_line_id"][0]
+        tax = tax_map.get(tax_id, {})
+        tax_use = tax.get("type_tax_use", "")
+        rate = abs(tax.get("amount", 0))
+
+        # Skip withholding taxes (handled by EWT extractor)
+        if tax.get("l10n_ph_atc"):
+            continue
+
+        if tax_use == "sale" and rate > 0:
+            output_vat += Decimal(str(abs(aml["balance"])))
+            vatable_sales += Decimal(str(aml["tax_base_amount"]))
+        elif tax_use == "purchase" and rate > 0:
+            input_vat += Decimal(str(abs(aml["balance"])))
+            total_purchases += Decimal(str(aml["tax_base_amount"]))
+
+    return {
+        "output_vat": output_vat, "vatable_sales": vatable_sales,
+        "zero_rated_sales": Decimal(0), "exempt_sales": Decimal(0),
+        "input_vat": input_vat, "total_purchases": total_purchases,
+        "sales_to_govt": Decimal(0),
+    }
+
+
+def fetch_income_statement(conn: OdooConnection, date_from: str, date_to: str) -> dict:
+    """Fetch income statement summary using read_group by account_type."""
+    from decimal import Decimal
+
+    groups = _execute(
+        conn,
+        "account.move.line",
+        "read_group",
+        [
+            [
+                ("move_id.state", "=", "posted"),
+                ("date", ">=", date_from),
+                ("date", "<=", date_to),
+                ("account_id.account_type", "in", [
+                    "income", "income_other",
+                    "expense_direct_cost", "expense", "expense_depreciation",
+                ]),
+            ],
+        ],
+        {"fields": ["balance"], "groupby": ["account_type"], "lazy": False},
+    )
+
+    revenue = Decimal(0)
+    non_operating = Decimal(0)
+    cost_of_sales = Decimal(0)
+    deductions = Decimal(0)
+
+    for group in groups:
+        acct_type = group.get("account_type") or group.get("account_id.account_type")
+        bal = Decimal(str(group.get("balance", 0)))
+        if acct_type == "income":
+            revenue += abs(bal)
+        elif acct_type == "income_other":
+            non_operating += abs(bal)
+        elif acct_type == "expense_direct_cost":
+            cost_of_sales += abs(bal)
+        elif acct_type in ("expense", "expense_depreciation"):
+            deductions += abs(bal)
+
+    return {
+        "revenue": revenue, "cost_of_sales": cost_of_sales,
+        "non_operating_income": non_operating, "deductions": deductions,
+    }
+
+
 def fetch_journal_entries_with_wht(
     conn: OdooConnection,
     date_from: str,

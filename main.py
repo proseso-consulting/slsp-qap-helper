@@ -35,12 +35,14 @@ from odoo_client import (
     fetch_bill_lines_with_tax,
     fetch_client_tasks,
     fetch_company_profile,
+    fetch_income_statement,
     fetch_journal_entries_with_wht,
     fetch_partner_details,
     fetch_partners_by_ids,
     fetch_posted_bills,
     fetch_tax_details,
     fetch_tax_lines_by_atc,
+    fetch_vat_summary,
     get_companies,
     get_semaphore,
 )
@@ -510,25 +512,33 @@ def ebirforms_generate(
 
     import calendar as _cal
 
+    EWT_FORMS = {"0619E", "0619F", "1601EQ", "1601FQ"}
+    VAT_FORMS = {"2550M", "2550Q"}
+    INCOME_FORMS = {"1702Q", "1702RT", "1702EX", "1702MX"}
     QUARTERLY_EWT_FORMS = {"1601EQ", "1601FQ"}
 
     with get_semaphore(db_name):
-        raw_lines = fetch_tax_lines_by_atc(conn, date_from, date_to)
-
-        # For quarterly forms, also fetch month-by-month for remittance fields
         monthly_totals = None
-        if form_number in QUARTERLY_EWT_FORMS:
-            start_month = int(date_from[5:7])
-            year = int(date_from[:4])
-            monthly_totals = []
-            for m in range(start_month, start_month + 3):
-                m_start = f"{year}-{m:02d}-01"
-                m_end = f"{year}-{m:02d}-{_cal.monthrange(year, m)[1]:02d}"
-                m_lines = fetch_tax_lines_by_atc(conn, m_start, m_end)
-                monthly_totals.append(m_lines)
+
+        if form_number in VAT_FORMS:
+            raw_data = fetch_vat_summary(conn, date_from, date_to)
+        elif form_number in INCOME_FORMS:
+            raw_data = fetch_income_statement(conn, date_from, date_to)
+        elif form_number in EWT_FORMS:
+            raw_data = fetch_tax_lines_by_atc(conn, date_from, date_to)
+            if form_number in QUARTERLY_EWT_FORMS:
+                start_month = int(date_from[5:7])
+                yr = int(date_from[:4])
+                monthly_totals = []
+                for m in range(start_month, start_month + 3):
+                    m_start = f"{yr}-{m:02d}-01"
+                    m_end = f"{yr}-{m:02d}-{_cal.monthrange(yr, m)[1]:02d}"
+                    monthly_totals.append(fetch_tax_lines_by_atc(conn, m_start, m_end))
+        else:
+            raw_data = {}
 
     xml_content = build_form_xml(
-        form_number, taxpayer, raw_lines, date_from, date_to,
+        form_number, taxpayer, raw_data, date_from, date_to,
         monthly_raw=monthly_totals,
     )
     profile_content = build_profile_content(taxpayer)
